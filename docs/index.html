@@ -109,6 +109,9 @@ header h2{font-size:15px;flex:1;font-weight:800}
 #toast.hata{background:var(--red)}
 .yukleniyor{text-align:center;padding:40px;color:var(--muted);font-size:14px}
 .bos{text-align:center;padding:40px 20px;color:var(--muted)}
+.siralama-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.filtre-btn{width:auto;background:var(--border);color:var(--muted);padding:6px 12px;font-size:12px;border-radius:20px;font-weight:700}
+.filtre-btn.aktif{background:var(--orange);color:#11111B}
 </style>
 </head>
 <body>
@@ -158,12 +161,38 @@ header h2{font-size:15px;flex:1;font-weight:800}
   <!-- ET -->
   <div id="tab-et" class="tab-icerik">
     <div class="arama-bar"><span class="ikon">🔍</span><input type="search" placeholder="Barkod veya tarih ara..." oninput="ara(this.value,'Et')"></div>
+    <div class="siralama-bar">
+      <button class="filtre-btn aktif" onclick="durum_filtre('Et','hepsi',this)">Tümü</button>
+      <button class="filtre-btn" onclick="durum_filtre('Et','kalan',this)">Devam</button>
+      <button class="filtre-btn" onclick="durum_filtre('Et','kritik',this)">⚠ Kritik</button>
+      <button class="filtre-btn" onclick="durum_filtre('Et','bitti',this)">✓ Bitti</button>
+      <select id="siralama-et" onchange="liste('Et')" style="margin-left:auto;width:auto;padding:6px 10px;font-size:12px;border-radius:10px">
+        <option value="gelis_desc">📅 Yeni→Eski</option>
+        <option value="gelis_asc">📅 Eski→Yeni</option>
+        <option value="kalan_desc">⬆ Kalan kg</option>
+        <option value="kalan_asc">⬇ Kalan kg</option>
+        <option value="bitis_yuzde">🔥 Tüketim %</option>
+      </select>
+    </div>
     <div class="urun-liste" id="liste-et"></div>
   </div>
 
   <!-- TAVUK -->
   <div id="tab-tavuk" class="tab-icerik">
     <div class="arama-bar"><span class="ikon">🔍</span><input type="search" placeholder="Barkod veya tarih ara..." oninput="ara(this.value,'Tavuk')"></div>
+    <div class="siralama-bar">
+      <button class="filtre-btn aktif" onclick="durum_filtre('Tavuk','hepsi',this)">Tümü</button>
+      <button class="filtre-btn" onclick="durum_filtre('Tavuk','kalan',this)">Devam</button>
+      <button class="filtre-btn" onclick="durum_filtre('Tavuk','kritik',this)">⚠ Kritik</button>
+      <button class="filtre-btn" onclick="durum_filtre('Tavuk','bitti',this)">✓ Bitti</button>
+      <select id="siralama-tavuk" onchange="liste('Tavuk')" style="margin-left:auto;width:auto;padding:6px 10px;font-size:12px;border-radius:10px">
+        <option value="gelis_desc">📅 Yeni→Eski</option>
+        <option value="gelis_asc">📅 Eski→Yeni</option>
+        <option value="kalan_desc">⬆ Kalan kg</option>
+        <option value="kalan_asc">⬇ Kalan kg</option>
+        <option value="bitis_yuzde">🔥 Tüketim %</option>
+      </select>
+    </div>
     <div class="urun-liste" id="liste-tavuk"></div>
   </div>
 
@@ -338,23 +367,68 @@ function ortGuncelle(d){
     <div class="deger" style="font-size:16px">Et: ${f((s30['Et']||0)/30)} kg</div><div class="alt">Tavuk: ${f((s30['Tavuk']||0)/30)} kg/gün</div></div>`;
 }
 
-function liste(kat,filtre=''){
+let aktifFiltre={Et:'hepsi', Tavuk:'hepsi'};
+let aktifArama={Et:'', Tavuk:''};
+
+function durum_filtre(kat, durum, btn){
+  aktifFiltre[kat]=durum;
+  const bar=document.getElementById('tab-'+kat.toLowerCase()).querySelector('.siralama-bar');
+  bar.querySelectorAll('.filtre-btn').forEach(b=>b.classList.remove('aktif'));
+  btn.classList.add('aktif');
+  liste(kat);
+}
+
+function ara(v,k){aktifArama[k]=v;liste(k)}
+
+function sirala(l, siralama){
+  const s=[...l];
+  if(siralama==='gelis_desc') return s.sort((a,b)=>ts(b.gelis_tarihi)-ts(a.gelis_tarihi));
+  if(siralama==='gelis_asc')  return s.sort((a,b)=>ts(a.gelis_tarihi)-ts(b.gelis_tarihi));
+  if(siralama==='kalan_desc') return s.sort((a,b)=>(b.kalan_miktar||0)-(a.kalan_miktar||0));
+  if(siralama==='kalan_asc')  return s.sort((a,b)=>(a.kalan_miktar||0)-(b.kalan_miktar||0));
+  if(siralama==='bitis_yuzde') return s.sort((a,b)=>{
+    const oa=a.ilk_miktar>0?(a.ilk_miktar-a.kalan_miktar)/a.ilk_miktar:0;
+    const ob=b.ilk_miktar>0?(b.ilk_miktar-b.kalan_miktar)/b.ilk_miktar:0;
+    return ob-oa;
+  });
+  return s;
+}
+
+function liste(kat){
   const el=document.getElementById('liste-'+kat.toLowerCase());
-  const l=urunler.filter(u=>u.kategori===kat&&(!filtre||u.barkod.includes(filtre)||(u.gelis_tarihi||'').includes(filtre)));
+  const filtre=aktifFiltre[kat]||'hepsi';
+  const arama=aktifArama[kat]||'';
+  const siralama=(document.getElementById('siralama-'+kat.toLowerCase())||{}).value||'gelis_desc';
+
+  let l=urunler.filter(u=>{
+    if(u.kategori!==kat) return false;
+    if(arama && !u.barkod.includes(arama) && !(u.gelis_tarihi||'').includes(arama)) return false;
+    const kal=u.kalan_miktar||0, ilk=u.ilk_miktar||0, o=ilk>0?kal/ilk:0;
+    const sc=kal===0?'bitti':o<=.2?'kritik':'kalan';
+    if(filtre==='hepsi') return true;
+    if(filtre==='kritik') return sc==='kritik';
+    if(filtre==='bitti') return sc==='bitti';
+    if(filtre==='kalan') return sc==='kalan';
+    return true;
+  });
+
+  l=sirala(l, siralama);
+
   if(!l.length){el.innerHTML='<div class="bos">📦<br>Kayıt bulunamadı.</div>';return}
   el.innerHTML=l.map(u=>{
     const kal=u.kalan_miktar||0,ilk=u.ilk_miktar||0,o=ilk>0?kal/ilk:0;
     const sc=kal===0?'bitti':o<=.2?'kritik':'kalan';
+    const yuzde=ilk>0?Math.round((1-o)*100):0;
     return`<div class="urun-kart" onclick="modalAc(${u.id})">
       <div class="ust"><span class="barkod">${u.barkod}</span><span class="tarih">📅 ${u.gelis_tarihi||'-'}</span></div>
       <div class="alt">
         <span class="etiket ilk">İlk: ${f(ilk)} kg</span>
         <span class="etiket ${sc}">${sc==='bitti'?'✓ Tükendi':sc==='kritik'?`⚠ KRİTİK ${f(kal)} kg`:`Kalan: ${f(kal)} kg`}</span>
+        <span class="etiket" style="background:rgba(203,166,247,.15);color:var(--purple)">%${yuzde}</span>
         ${u.kullanim_tarihi&&u.kullanim_tarihi!=='-'?`<span class="etiket" style="background:rgba(166,227,161,.15);color:var(--green)">🗓 ${u.kullanim_tarihi}</span>`:''}
       </div></div>`;
   }).join('');
 }
-function ara(v,k){liste(k,v)}
 
 // ── ANALİZ ──
 function haftaNo(d){return Math.ceil(((d-new Date(d.getFullYear(),0,1))/86400000+new Date(d.getFullYear(),0,1).getDay()+1)/7)}
