@@ -604,7 +604,7 @@ button { cursor: pointer; border: none; }
 
 <script>
 // ── State ─────────────────────────────────────────────────────────────────
-let API_URL = localStorage.getItem('vasak_api') || '';
+let API_URL = localStorage.getItem('vasak_api') || 'https://vasak-erp.onrender.com';
 let TOKEN   = localStorage.getItem('vasak_token') || '';
 let tumUrunler = [];
 
@@ -619,7 +619,7 @@ window.addEventListener('load', () => {
       } else {
         const gi = document.getElementById('giris-ekrani');
         gi.style.display = 'flex';
-        document.getElementById('backend-url').value = API_URL;
+        document.getElementById('backend-url').value = API_URL || 'https://vasak-erp.onrender.com';
       }
     }, 500);
   }, 1200);
@@ -731,8 +731,8 @@ async function analizYukle() {
     } else {
       kl.innerHTML = d.kritik_urunler.map(u => `
         <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--surface0)">
-          <span style="font-size:13px">${u.ad}</span>
-          <span style="color:var(--red);font-weight:600">${u.stok} ${u.birim || 'kg'}</span>
+          <span style="font-size:13px">${u.barkod || u.ad || '#' + u.id}</span>
+          <span style="color:var(--red);font-weight:600">${u.kalan_miktar ?? u.stok ?? 0} kg</span>
         </div>
       `).join('');
     }
@@ -763,24 +763,24 @@ function urunListesiRender(urunler) {
     return;
   }
   el.innerHTML = urunler.map(u => {
-    const stok = u.stok || 0;
+    const stok = u.kalan_miktar ?? u.stok ?? 0;
     const cls = stok <= 0 ? 'stok-kritik' : stok < 10 ? 'stok-az' : 'stok-normal';
     const badgeCls = u.kategori === 'takoz' ? 'badge-takoz' : 'badge-kuvet';
     return `
     <div class="urun-kart">
       <span class="urun-kategori-badge ${badgeCls}">${u.kategori || 'küvet'}</span>
       <div class="urun-bilgi">
-        <div class="urun-ad">${u.ad}</div>
-        ${u.barkod ? `<div class="urun-barkod">${u.barkod}</div>` : ''}
+        <div class="urun-ad">${u.barkod || u.ad || '#' + u.id}</div>
+        ${u.gelis_tarihi ? `<div class="urun-barkod">📅 ${u.gelis_tarihi}</div>` : ''}
       </div>
       <div class="urun-stok">
         <div class="stok-deger ${cls}">${(+stok).toFixed(1)}</div>
         <div class="stok-birim">${u.birim || 'kg'}</div>
       </div>
       <div class="urun-aksiyonlar">
-        <button class="btn btn-success" onclick="stokModalAc(${u.id},'${u.ad.replace(/'/g,"\\'")}',${stok})">±</button>
+        <button class="btn btn-success" onclick="stokModalAc(${u.id},'${(u.barkod||'#'+u.id).replace(/'/g,"\\'")}',${stok})">±</button>
         <button class="btn btn-ghost" onclick="urunDuzenle(${u.id})">✏</button>
-        <button class="btn btn-danger" onclick="urunSil(${u.id},'${u.ad.replace(/'/g,"\\'")}')">✕</button>
+        <button class="btn btn-danger" onclick="urunSil(${u.id},'${(u.barkod||'#'+u.id).replace(/'/g,"\\'")}')">✕</button>
       </div>
     </div>`;
   }).join('');
