@@ -1,195 +1,191 @@
-"""
-VAŞAK ERP v15.0 · Maviş 🐱
-FastAPI Backend — Render.com
-Supabase şeması: lot/parti bazlı et & tavuk takip
-"""
-
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timedelta
 import os, jwt, httpx
+from datetime import datetime, timedelta
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-JWT_SECRET   = os.getenv("JWT_SECRET", "vasak_gizli_anahtar_2025")
-SIFRE        = os.getenv("VASAK_SIFRE", "123456")
+app = FastAPI(title="VAŞAK ERP v15.0 Maviş")
 
-app = FastAPI(title="VAŞAK ERP API", description="v15.0 Maviş — Et & Tavuk Lot Takip", version="15.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+JWT_SECRET   = os.environ.get("JWT_SECRET", "vasak_gizli_anahtar_2025")
+VASAK_SIFRE  = os.environ.get("VASAK_SIFRE", "123456")
+
 security = HTTPBearer()
 
-def headers():
-    return {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json",
-        "Prefer": "return=representation"
-    }
+def sb_headers():
+    return {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json", "Prefer": "return=representation"}
 
-async def sb_get(tablo, params=""):
-    async with httpx.AsyncClient() as c:
-        r = await c.get(f"{SUPABASE_URL}/rest/v1/{tablo}?{params}", headers=headers())
-        r.raise_for_status()
-        return r.json()
-
-async def sb_post(tablo, veri):
-    async with httpx.AsyncClient() as c:
-        r = await c.post(f"{SUPABASE_URL}/rest/v1/{tablo}", headers=headers(), json=veri)
-        r.raise_for_status()
-        return r.json()
-
-async def sb_patch(tablo, id, veri):
-    async with httpx.AsyncClient() as c:
-        r = await c.patch(f"{SUPABASE_URL}/rest/v1/{tablo}?id=eq.{id}", headers=headers(), json=veri)
-        r.raise_for_status()
-        return r.json()
-
-async def sb_delete(tablo, id):
-    async with httpx.AsyncClient() as c:
-        r = await c.delete(f"{SUPABASE_URL}/rest/v1/{tablo}?id=eq.{id}", headers=headers())
-        r.raise_for_status()
-        return {"silindi": True}
-
-def token_olustur():
-    exp = datetime.utcnow() + timedelta(hours=24)
-    return jwt.encode({"sub": "vasak", "exp": exp}, JWT_SECRET, algorithm="HS256")
-
-def token_dogrula(cred: HTTPAuthorizationCredentials = Depends(security)):
+async def token_kontrol(cred: HTTPAuthorizationCredentials = Depends(security)):
     try:
         jwt.decode(cred.credentials, JWT_SECRET, algorithms=["HS256"])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token süresi doldu")
     except Exception:
         raise HTTPException(status_code=401, detail="Geçersiz token")
-    return cred.credentials
 
-class GirisIstegi(BaseModel):
+def iso2dmy(iso: str) -> str:
+    if not iso or iso == "-":
+        return "-"
+    try:
+        y, m, d = iso.split("-")
+        return f"{d}.{m}.{y}"
+    except Exception:
+        return iso
+
+def supabase_tarihleri_dmy(u: dict) -> dict:
+    for alan in ["gelis_tarihi", "kullanim_tarihi", "tekrar_kullanim_tarihi",
+                 "kuvet_kullanim_tarihi", "takoz_kullanim_tarihi"]:
+        if alan in u and u[alan]:
+            val = u[alan]
+            if len(val) == 10 and val[4] == "-":
+                u[alan] = iso2dmy(val)
+    return u
+
+# ── GİRİŞ ──────────────────────────────────────────────────────────────────────
+
+class GirisIstek(BaseModel):
     sifre: str
 
-class LotEkle(BaseModel):
-    barkod: Optional[str] = None
-    kategori: str = "küvet"
-    gelis_tarihi: Optional[str] = None
-    ilk_miktar: float = 0.0
-    kalan_miktar: Optional[float] = None
-    kuvet_miktar: float = 0.0
-    takoz_miktar: float = 0.0
-    kuvet_kullanim_tarihi: Optional[str] = None
-    takoz_kullanim_tarihi: Optional[str] = None
-    kullanim_tarihi: Optional[str] = None
-    tekrar_kullanim_tarihi: Optional[str] = None
-    tekrar_miktar: float = 0.0
+@app.post("/api/giris")
+async def giris(istek: GirisIstek):
+    if istek.sifre != VASAK_SIFRE:
+        raise HTTPException(status_code=401, detail="Hatalı şifre!")
+    token = jwt.encode(
+        {"sub": "vasak", "exp": datetime.utcnow() + timedelta(days=30)},
+        JWT_SECRET, algorithm="HS256"
+    )
+    return {"token": token}
 
-class LotGuncelle(BaseModel):
-    barkod: Optional[str] = None
-    kategori: Optional[str] = None
+# ── ÜRÜNLER ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/urunler")
+async def urunler_listele(_=Depends(token_kontrol)):
+    async with httpx.AsyncClient() as c:
+        r = await c.get(
+            f"{SUPABASE_URL}/rest/v1/urunler?select=*&order=id.desc",
+            headers=sb_headers()
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail="Supabase hatası")
+    liste = [supabase_tarihleri_dmy(u) for u in r.json()]
+    return {"urunler": liste, "toplam": len(liste)}
+
+class UrunEkle(BaseModel):
+    barkod: str
+    kategori: str
     gelis_tarihi: Optional[str] = None
     ilk_miktar: Optional[float] = None
     kalan_miktar: Optional[float] = None
-    kuvet_miktar: Optional[float] = None
-    takoz_miktar: Optional[float] = None
-    kuvet_kullanim_tarihi: Optional[str] = None
-    takoz_kullanim_tarihi: Optional[str] = None
+
+@app.post("/api/urunler")
+async def urun_ekle(u: UrunEkle, _=Depends(token_kontrol)):
+    veri = {
+        "barkod": u.barkod,
+        "kategori": u.kategori,
+        "gelis_tarihi": u.gelis_tarihi or "-",
+        "ilk_miktar": u.ilk_miktar or 0,
+        "kalan_miktar": u.kalan_miktar if u.kalan_miktar is not None else (u.ilk_miktar or 0),
+    }
+    async with httpx.AsyncClient() as c:
+        r = await c.post(
+            f"{SUPABASE_URL}/rest/v1/urunler",
+            headers=sb_headers(), json=veri
+        )
+    if r.status_code not in (200, 201):
+        raise HTTPException(status_code=500, detail=f"Supabase: {r.text}")
+    return {"ok": True}
+
+class UrunGuncelle(BaseModel):
     kullanim_tarihi: Optional[str] = None
     tekrar_kullanim_tarihi: Optional[str] = None
+    kuvet_kullanim_tarihi: Optional[str] = None
+    takoz_kullanim_tarihi: Optional[str] = None
+    kalan_miktar: Optional[float] = None
     tekrar_miktar: Optional[float] = None
+    kuvet_miktar: Optional[float] = None
+    takoz_miktar: Optional[float] = None
 
-class KalanGuncelle(BaseModel):
-    miktar: float
-    islem: str = "ayarla"   # ekle | cikar | ayarla
-    not_: Optional[str] = None
+@app.put("/api/urunler/{urun_id}")
+async def urun_guncelle(urun_id: int, g: UrunGuncelle, _=Depends(token_kontrol)):
+    veri = {k: v for k, v in g.dict().items() if v is not None}
+    if not veri:
+        raise HTTPException(status_code=400, detail="Güncellenecek alan yok")
+    async with httpx.AsyncClient() as c:
+        r = await c.patch(
+            f"{SUPABASE_URL}/rest/v1/urunler?id=eq.{urun_id}",
+            headers=sb_headers(), json=veri
+        )
+    if r.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"Supabase: {r.text}")
+    return {"ok": True}
+
+@app.delete("/api/urunler/{urun_id}")
+async def urun_sil(urun_id: int, _=Depends(token_kontrol)):
+    async with httpx.AsyncClient() as c:
+        r = await c.delete(
+            f"{SUPABASE_URL}/rest/v1/urunler?id=eq.{urun_id}",
+            headers=sb_headers()
+        )
+    if r.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=f"Supabase: {r.text}")
+    return {"ok": True}
+
+# ── ANALİZ ─────────────────────────────────────────────────────────────────────
+
+@app.get("/api/analiz")
+async def analiz(_=Depends(token_kontrol)):
+    async with httpx.AsyncClient() as c:
+        r = await c.get(
+            f"{SUPABASE_URL}/rest/v1/urunler?select=*",
+            headers=sb_headers()
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail="Supabase hatası")
+
+    urunler = [supabase_tarihleri_dmy(u) for u in r.json()]
+    bugun = datetime.now()
+    s7  = {"Et": 0.0, "Tavuk": 0.0}
+    s30 = {"Et": 0.0, "Tavuk": 0.0}
+
+    for u in urunler:
+        kat = u.get("kategori", "")
+        if kat not in ("Et", "Tavuk"):
+            continue
+        ilk = u.get("ilk_miktar") or 0
+        kal = u.get("kalan_miktar") or 0
+        tuk = max(0, ilk - kal)
+        if tuk <= 0:
+            continue
+        tar_str = u.get("kullanim_tarihi") or "-"
+        if tar_str and tar_str != "-":
+            try:
+                d, m, y = tar_str.split(".")
+                tar = datetime(int(y), int(m), int(d))
+                fark = (bugun - tar).days
+                if fark <= 7:
+                    s7[kat] += tuk
+                if fark <= 30:
+                    s30[kat] += tuk
+            except Exception:
+                pass
+
+    return {"son_7_gun": s7, "son_30_gun": s30}
+
+# ── SAĞLIK ─────────────────────────────────────────────────────────────────────
 
 @app.get("/")
 async def root():
-    return {"uygulama": "VAŞAK ERP", "versiyon": "v15.0 Maviş", "durum": "çalışıyor 🐾", "docs": "/docs"}
+    return {"sistem": "VAŞAK ERP", "versiyon": "v15.0 Maviş", "durum": "çalışıyor 🐱"}
 
-@app.get("/saglik")
+@app.get("/api/saglik")
 async def saglik():
-    return {"durum": "çalışıyor", "versiyon": "v15.0 Maviş", "zaman": datetime.now().isoformat()}
-
-@app.post("/giris")
-async def giris(istek: GirisIstegi):
-    if istek.sifre != SIFRE:
-        raise HTTPException(status_code=401, detail="Hatalı şifre")
-    return {"token": token_olustur(), "mesaj": "Giriş başarılı 🐱"}
-
-@app.get("/urunler")
-async def lotlari_listele(kategori: Optional[str] = None, ara: Optional[str] = None, _=Depends(token_dogrula)):
-    params = "order=id.desc"
-    if kategori:
-        params += f"&kategori=eq.{kategori}"
-    if ara:
-        params += f"&barkod=ilike.*{ara}*"
-    return await sb_get("urunler", params)
-
-@app.get("/urunler/{id}")
-async def lot_getir(id: int, _=Depends(token_dogrula)):
-    sonuc = await sb_get("urunler", f"id=eq.{id}")
-    if not sonuc:
-        raise HTTPException(status_code=404, detail="Lot bulunamadı")
-    return sonuc[0]
-
-@app.get("/urunler/barkod/{barkod}")
-async def barkodla_getir(barkod: str, _=Depends(token_dogrula)):
-    sonuc = await sb_get("urunler", f"barkod=eq.{barkod}")
-    if not sonuc:
-        raise HTTPException(status_code=404, detail="Barkod bulunamadı")
-    return sonuc[0]
-
-@app.post("/urunler", status_code=201)
-async def lot_ekle(lot: LotEkle, _=Depends(token_dogrula)):
-    veri = lot.dict()
-    if veri["kalan_miktar"] is None:
-        veri["kalan_miktar"] = veri["ilk_miktar"]
-    if not veri["gelis_tarihi"]:
-        veri["gelis_tarihi"] = datetime.now().strftime("%Y-%m-%d")
-    return await sb_post("urunler", veri)
-
-@app.patch("/urunler/{id}")
-async def lot_guncelle(id: int, guncelleme: LotGuncelle, _=Depends(token_dogrula)):
-    veri = {k: v for k, v in guncelleme.dict().items() if v is not None}
-    return await sb_patch("urunler", id, veri)
-
-@app.delete("/urunler/{id}")
-async def lot_sil(id: int, _=Depends(token_dogrula)):
-    return await sb_delete("urunler", id)
-
-@app.post("/urunler/{id}/stok")
-async def kalan_guncelle(id: int, istek: KalanGuncelle, _=Depends(token_dogrula)):
-    lot = await lot_getir(id, _)
-    mevcut = lot.get("kalan_miktar") or 0
-    if istek.islem == "ekle":
-        yeni = mevcut + istek.miktar
-    elif istek.islem == "cikar":
-        yeni = mevcut - istek.miktar
-        if yeni < 0:
-            raise HTTPException(status_code=400, detail=f"Yetersiz stok (mevcut: {mevcut})")
-    else:
-        yeni = istek.miktar
-    return await sb_patch("urunler", id, {"kalan_miktar": yeni})
-
-@app.get("/analiz")
-async def analiz(_=Depends(token_dogrula)):
-    try:
-        lotlar = await sb_get("urunler", "order=id.desc")
-        toplam_lot    = len(lotlar)
-        toplam_kalan  = sum(l.get("kalan_miktar") or 0 for l in lotlar)
-        toplam_ilk    = sum(l.get("ilk_miktar") or 0 for l in lotlar)
-        toplam_kuvet  = sum(l.get("kuvet_miktar") or 0 for l in lotlar)
-        toplam_takoz  = sum(l.get("takoz_miktar") or 0 for l in lotlar)
-        kritik = [l for l in lotlar if 0 < (l.get("kalan_miktar") or 0) < 10]
-        return {
-            "toplam_urun":        toplam_lot,
-            "toplam_stok_kg":     round(toplam_kalan, 2),
-            "toplam_deger_tl":    round(toplam_ilk, 2),
-            "kritik_stok_sayisi": len(kritik),
-            "kritik_urunler":     kritik[:5],
-            "toplam_kuvet_kg":    round(toplam_kuvet, 2),
-            "toplam_takoz_kg":    round(toplam_takoz, 2),
-            "son_guncelleme":     datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"durum": "ok"}
