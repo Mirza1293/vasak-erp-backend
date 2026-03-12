@@ -113,6 +113,7 @@ class UrunGuncelle(BaseModel):
     tekrar_miktar: Optional[float] = None
     kuvet_miktar: Optional[float] = None
     takoz_miktar: Optional[float] = None
+    zayi_miktar: Optional[float] = None
 
 @app.put("/api/urunler/{urun_id}")
 async def urun_guncelle(urun_id: int, g: UrunGuncelle, _=Depends(token_kontrol)):
@@ -162,7 +163,8 @@ async def analiz(_=Depends(token_kontrol)):
             continue
         ilk = u.get("ilk_miktar") or 0
         kal = u.get("kalan_miktar") or 0
-        tuk = max(0, ilk - kal)
+        zayi = u.get("zayi_miktar") or 0
+        tuk = max(0, ilk - kal - zayi)
         if tuk <= 0:
             continue
         tar_str = u.get("kullanim_tarihi") or "-"
