@@ -123,6 +123,10 @@ async def giris(istek: GirisIstegi):
         raise HTTPException(status_code=401, detail="Hatalı şifre")
     return {"token": token_olustur(), "mesaj": "Giriş başarılı 🐱"}
 
+@app.get("/")
+async def root():
+    return {"uygulama": "VAŞAK ERP", "versiyon": "v15.0 Maviş", "durum": "çalışıyor 🐾", "docs": "/docs"}
+
 @app.get("/saglik")
 async def saglik():
     return {"durum": "çalışıyor", "versiyon": "v15.0 Maviş", "zaman": datetime.now().isoformat()}
