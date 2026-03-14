@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#1e1e2e",
   "theme_color": "#1e1e2e",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "icons": [
     {
       "src": "./vasak_192.png",
@@ -21,6 +21,17 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["business", "productivity"],
-  "lang": "tr"
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "lang": "tr",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
 }
