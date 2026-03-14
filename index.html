@@ -126,6 +126,14 @@ header h2{font-size:15px;flex:1;font-weight:800}
 .urun-tablo .td-barkod{font-family:monospace;font-size:12px}
 .urun-tablo .td-kritis{color:var(--red)}
 .urun-tablo .td-zayi{color:var(--yellow)}
+.urun-tablo th{cursor:pointer;user-select:none;position:relative}
+.urun-tablo th:hover{background:var(--border);color:var(--text)}
+.th-sort-ok{margin-left:4px;opacity:.5;font-size:10px}
+.th-sort-aktif .th-sort-ok{opacity:1;color:var(--orange)}
+.th-sort-aktif{color:var(--orange)!important}
+.filtre-satir td{padding:4px 6px!important;background:var(--surface)!important;border-top:none!important}
+.filtre-input{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;width:100%;outline:none}
+.filtre-input:focus{border-color:var(--orange)}
 @media(max-width:900px){
   .urun-tablo-wrap{display:none}
   .urun-liste{display:flex!important}
@@ -491,13 +499,63 @@ function liste(kat){
     tabloWrap.className='urun-tablo-wrap';
     el.parentNode.insertBefore(tabloWrap,el);
   }
+
+  // Sıralama & filtre state
+  if(!window._tabloState) window._tabloState={};
+  if(!window._tabloState[kat]) window._tabloState[kat]={col:-1,asc:true,filtreler:{}};
+  const st=window._tabloState[kat];
+
+  // Filtrele
+  const sutunlar=['barkod','gelis_tarihi','kullanim_tarihi','kuvet_kullanim_tarihi','kuvet_miktar',
+                  'takoz_kullanim_tarihi','takoz_miktar','ilk_miktar','kalan_miktar','_yuzde','zayi_miktar','zayi_tarihi'];
+  let lf=l.filter(u=>{
+    return sutunlar.every((s,i)=>{
+      const fv=(st.filtreler[i]||'').toLowerCase().trim();
+      if(!fv) return true;
+      let val='';
+      if(s==='_yuzde'){const ilk=u.ilk_miktar||0,kal=u.kalan_miktar||0;val=ilk>0?String(Math.round((ilk-kal-(u.zayi_miktar||0))/ilk*100)):'0';}
+      else if(s==='kuvet_miktar'||s==='takoz_miktar'||s==='ilk_miktar'||s==='kalan_miktar'||s==='zayi_miktar')
+        val=String(u[s]||0).replace('.',',');
+      else val=String(u[s]||'-');
+      return val.toLowerCase().includes(fv);
+    });
+  });
+
+  // Sırala
+  if(st.col>=0){
+    lf=[...lf].sort((a,b)=>{
+      const s=sutunlar[st.col];
+      let va,vb;
+      if(s==='_yuzde'){
+        const fi=v=>v.ilk_miktar>0?Math.round((v.ilk_miktar-v.kalan_miktar-(v.zayi_miktar||0))/v.ilk_miktar*100):0;
+        va=fi(a);vb=fi(b);
+      } else if(s==='kuvet_miktar'||s==='takoz_miktar'||s==='ilk_miktar'||s==='kalan_miktar'||s==='zayi_miktar'){
+        va=a[s]||0;vb=b[s]||0;
+      } else if(s.includes('tarihi')){
+        const ts2=v=>{const t=v[s];if(!t||t==='-')return 0;const[d,m,y]=t.split('.');return+y*10000+(+m)*100+(+d);};
+        va=ts2(a);vb=ts2(b);
+      } else {va=String(a[s]||'');vb=String(b[s]||'');}
+      if(va<vb) return st.asc?-1:1;
+      if(va>vb) return st.asc?1:-1;
+      return 0;
+    });
+  }
+
+  const basliklar=['Barkod','Geliş T.','Kullanım T.','Küvet T.','Küvet (kg)','Takoz T.','Takoz (kg)','İlk (kg)','Kalan (kg)','Tüketim','Zayi (kg)','Zayi T.'];
+
   tabloWrap.innerHTML=`<table class="urun-tablo">
-    <thead><tr>
-      <th>Barkod</th><th>Geliş T.</th><th>Kullanım T.</th>
-      <th>Küvet T.</th><th>Küvet (kg)</th><th>Takoz T.</th><th>Takoz (kg)</th>
-      <th>İlk (kg)</th><th>Kalan (kg)</th><th>Tüketim</th><th>Zayi (kg)</th><th>Zayi T.</th>
-    </tr></thead>
-    <tbody>${l.map(u=>{
+    <thead>
+      <tr>${basliklar.map((b,i)=>{
+        const aktif=st.col===i;
+        const ok=aktif?(st.asc?'▲':'▼'):'⇅';
+        return`<th class="${aktif?'th-sort-aktif':''}" onclick="tabloSirala('${kat}',${i})">${b}<span class="th-sort-ok">${ok}</span></th>`;
+      }).join('')}</tr>
+      <tr class="filtre-satir">${basliklar.map((_,i)=>
+        `<td><input class="filtre-input" placeholder="Filtrele..." value="${st.filtreler[i]||''}"
+          oninput="tabloFiltrele('${kat}',${i},this.value)" onclick="event.stopPropagation()"></td>`
+      ).join('')}</tr>
+    </thead>
+    <tbody>${lf.map(u=>{
       const kal=u.kalan_miktar||0,ilk=u.ilk_miktar||0;
       const yuzde=ilk>0?Math.round((ilk-kal-(u.zayi_miktar||0))/ilk*100):0;
       const kritik=kal>0&&kal<=(ilk*0.2);
@@ -517,6 +575,22 @@ function liste(kat){
       </tr>`;
     }).join('')}</tbody>
   </table>`;
+}
+
+function tabloSirala(kat,col){
+  if(!window._tabloState) window._tabloState={};
+  if(!window._tabloState[kat]) window._tabloState[kat]={col:-1,asc:true,filtreler:{}};
+  const st=window._tabloState[kat];
+  if(st.col===col) st.asc=!st.asc;
+  else{st.col=col;st.asc=true;}
+  liste(kat);
+}
+
+function tabloFiltrele(kat,col,val){
+  if(!window._tabloState) window._tabloState={};
+  if(!window._tabloState[kat]) window._tabloState[kat]={col:-1,asc:true,filtreler:{}};
+  window._tabloState[kat].filtreler[col]=val;
+  liste(kat);
 }
 
 // ── ANALİZ ──
