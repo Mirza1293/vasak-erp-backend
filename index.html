@@ -116,6 +116,24 @@ header h2{font-size:15px;flex:1;font-weight:800}
 .analiz-baslik h3{font-size:15px;font-weight:800}
 .analiz-badge{font-size:11px;padding:3px 8px;border-radius:20px;font-weight:700}
 .analiz-tablo-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border)}
+
+/* MASAÜSTÜ TABLO - Et/Tavuk */
+.urun-tablo-wrap{overflow-x:auto;border-radius:14px;border:1px solid var(--border)}
+.urun-tablo{width:100%;border-collapse:collapse;font-size:13px}
+.urun-tablo th{background:var(--surface2);color:var(--muted);padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;position:sticky;top:0;z-index:1}
+.urun-tablo td{padding:9px 12px;border-top:1px solid var(--border);white-space:nowrap;cursor:pointer}
+.urun-tablo tr:hover td{background:var(--surface2)}
+.urun-tablo .td-barkod{font-family:monospace;font-size:12px}
+.urun-tablo .td-kritis{color:var(--red)}
+.urun-tablo .td-zayi{color:var(--yellow)}
+@media(max-width:900px){
+  .urun-tablo-wrap{display:none}
+  .urun-liste{display:flex!important}
+}
+@media(min-width:901px){
+  .urun-tablo-wrap{display:block}
+  .urun-liste{display:none!important}
+}
 .analiz-tablo{width:100%;border-collapse:collapse;font-size:13px}
 .analiz-tablo th{background:var(--surface2);color:var(--muted);padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
 .analiz-tablo td{padding:10px 12px;border-top:1px solid var(--border);white-space:nowrap}
@@ -249,7 +267,7 @@ header h2{font-size:15px;flex:1;font-weight:800}
     <div class="analiz-bolum">
       <div class="analiz-baslik"><h3>📉 Günlük Tüketim</h3><span class="analiz-badge" style="background:rgba(243,139,168,.2);color:var(--red)">Çıkışlar</span></div>
       <div class="analiz-tablo-wrap"><table class="analiz-tablo">
-        <thead><tr><th>Tarih</th><th>Et (kg)</th><th>Tavuk (kg)</th><th>Toplam</th></tr></thead>
+        <thead><tr><th>Tarih</th><th>Et (kg)</th><th>Tavuk (kg)</th><th>Toplam</th><th style="color:var(--yellow)">Zayi (kg)</th></tr></thead>
         <tbody id="tb-gunluk"></tbody>
       </table></div>
     </div>
@@ -257,7 +275,7 @@ header h2{font-size:15px;flex:1;font-weight:800}
     <div class="analiz-bolum">
       <div class="analiz-baslik"><h3>📅 Haftalık Tüketim</h3><span class="analiz-badge" style="background:rgba(137,180,250,.2);color:var(--blue)">Çıkışlar</span></div>
       <div class="analiz-tablo-wrap"><table class="analiz-tablo">
-        <thead><tr><th>Hafta</th><th>Et (kg)</th><th>Tavuk (kg)</th><th>Toplam</th></tr></thead>
+        <thead><tr><th>Hafta</th><th>Et (kg)</th><th>Tavuk (kg)</th><th>Toplam</th><th style="color:var(--yellow)">Zayi (kg)</th></tr></thead>
         <tbody id="tb-haftalik"></tbody>
       </table></div>
     </div>
@@ -265,7 +283,7 @@ header h2{font-size:15px;flex:1;font-weight:800}
     <div class="analiz-bolum">
       <div class="analiz-baslik"><h3>🗓 Aylık Tüketim</h3><span class="analiz-badge" style="background:rgba(166,227,161,.2);color:var(--green)">Çıkışlar</span></div>
       <div class="analiz-tablo-wrap"><table class="analiz-tablo">
-        <thead><tr><th>Ay</th><th>Et (kg)</th><th>Tavuk (kg)</th><th>Toplam</th></tr></thead>
+        <thead><tr><th>Ay</th><th>Et (kg)</th><th>Tavuk (kg)</th><th>Toplam</th><th style="color:var(--yellow)">Zayi (kg)</th></tr></thead>
         <tbody id="tb-aylik"></tbody>
       </table></div>
     </div>
@@ -273,7 +291,7 @@ header h2{font-size:15px;flex:1;font-weight:800}
     <div class="analiz-bolum">
       <div class="analiz-baslik"><h3>📦 Gelen Koli Analizi</h3><span class="analiz-badge" style="background:rgba(203,166,247,.2);color:var(--purple)">Girişler</span></div>
       <div class="analiz-tablo-wrap"><table class="analiz-tablo">
-        <thead><tr><th>Tarih</th><th>15'lik</th><th>30'luk</th><th>40'lık</th><th>Diğer</th><th>Toplam</th></tr></thead>
+        <thead><tr><th>Tarih</th><th>Kat.</th><th>4'lük</th><th>6'lık</th><th>8'lik</th><th>10'luk</th><th>12'lik</th><th>15'lik</th><th>20'lik</th><th>30'luk</th><th>40'lık</th><th>50'lik</th><th>Diğer</th><th>Toplam</th></tr></thead>
         <tbody id="tb-gelen"></tbody>
       </table></div>
     </div>
@@ -448,6 +466,7 @@ function liste(kat){
   l=sirala(l, siralama);
 
   if(!l.length){el.innerHTML='<div class="bos">📦<br>Kayıt bulunamadı.</div>';return}
+  // Mobil: kart görünümü
   el.innerHTML=l.map(u=>{
     const kal=u.kalan_miktar||0,ilk=u.ilk_miktar||0,o=ilk>0?kal/ilk:0;
     const sc=kal===0?'bitti':o<=.2?'kritik':'kalan';
@@ -462,6 +481,42 @@ function liste(kat){
         ${u.zayi_miktar>0?`<span class="etiket" style="background:rgba(249,226,175,.15);color:var(--yellow)">⚠️ Zayi: ${f(u.zayi_miktar)} kg</span>`:''}
       </div></div>`;
   }).join('');
+
+  // Masaüstü: tablo görünümü
+  const tabloId='tablo-'+kat.toLowerCase();
+  let tabloWrap=document.getElementById(tabloId);
+  if(!tabloWrap){
+    tabloWrap=document.createElement('div');
+    tabloWrap.id=tabloId;
+    tabloWrap.className='urun-tablo-wrap';
+    el.parentNode.insertBefore(tabloWrap,el);
+  }
+  tabloWrap.innerHTML=`<table class="urun-tablo">
+    <thead><tr>
+      <th>Barkod</th><th>Geliş T.</th><th>Kullanım T.</th>
+      <th>Küvet T.</th><th>Küvet (kg)</th><th>Takoz T.</th><th>Takoz (kg)</th>
+      <th>İlk (kg)</th><th>Kalan (kg)</th><th>Tüketim</th><th>Zayi (kg)</th><th>Zayi T.</th>
+    </tr></thead>
+    <tbody>${l.map(u=>{
+      const kal=u.kalan_miktar||0,ilk=u.ilk_miktar||0;
+      const yuzde=ilk>0?Math.round((ilk-kal-(u.zayi_miktar||0))/ilk*100):0;
+      const kritik=kal>0&&kal<=(ilk*0.2);
+      return`<tr onclick="modalAc(${u.id})">
+        <td class="td-barkod">${u.barkod}</td>
+        <td>${u.gelis_tarihi||'-'}</td>
+        <td>${u.kullanim_tarihi||'-'}</td>
+        <td>${u.kuvet_kullanim_tarihi||'-'}</td>
+        <td>${f(u.kuvet_miktar||0)}</td>
+        <td>${u.takoz_kullanim_tarihi||'-'}</td>
+        <td>${f(u.takoz_miktar||0)}</td>
+        <td>${f(ilk)}</td>
+        <td class="${kritik?'td-kritis':''}">${f(kal)}</td>
+        <td>%${yuzde}</td>
+        <td class="${(u.zayi_miktar||0)>0?'td-zayi':''}">${f(u.zayi_miktar||0)}</td>
+        <td>${u.zayi_tarihi||'-'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
 }
 
 // ── ANALİZ ──
@@ -490,9 +545,9 @@ function analizHesapla(){
       const dt=new Date(+y,m-1,+d);
       const hk=`${y} - ${haftaNo(dt)}. Hafta`;
       const ak=`${y} - ${m} (${AYLAR[m]||''})`;
-      if(!gVeri[t])gVeri[t]={Et:0,Tavuk:0};
-      if(!hVeri[hk])hVeri[hk]={Et:0,Tavuk:0};
-      if(!aVeri[ak])aVeri[ak]={Et:0,Tavuk:0};
+      if(!gVeri[t])gVeri[t]={Et:0,Tavuk:0,Zayi:0};
+      if(!hVeri[hk])hVeri[hk]={Et:0,Tavuk:0,Zayi:0};
+      if(!aVeri[ak])aVeri[ak]={Et:0,Tavuk:0,Zayi:0};
       gVeri[t][kat]+=tuk;hVeri[hk][kat]+=tuk;aVeri[ak][kat]+=tuk;
     }
     // Küvet tüketimi
@@ -501,9 +556,9 @@ function analizHesapla(){
       const dt=new Date(+y,m-1,+d);
       const hk=`${y} - ${haftaNo(dt)}. Hafta`;
       const ak=`${y} - ${m} (${AYLAR[m]||''})`;
-      if(!gVeri[t])gVeri[t]={Et:0,Tavuk:0};
-      if(!hVeri[hk])hVeri[hk]={Et:0,Tavuk:0};
-      if(!aVeri[ak])aVeri[ak]={Et:0,Tavuk:0};
+      if(!gVeri[t])gVeri[t]={Et:0,Tavuk:0,Zayi:0};
+      if(!hVeri[hk])hVeri[hk]={Et:0,Tavuk:0,Zayi:0};
+      if(!aVeri[ak])aVeri[ak]={Et:0,Tavuk:0,Zayi:0};
       gVeri[t][kat]+=kuvetKg;hVeri[hk][kat]+=kuvetKg;aVeri[ak][kat]+=kuvetKg;
     }
     // Takoz tüketimi
@@ -512,20 +567,31 @@ function analizHesapla(){
       const dt=new Date(+y,m-1,+d);
       const hk=`${y} - ${haftaNo(dt)}. Hafta`;
       const ak=`${y} - ${m} (${AYLAR[m]||''})`;
-      if(!gVeri[t])gVeri[t]={Et:0,Tavuk:0};
-      if(!hVeri[hk])hVeri[hk]={Et:0,Tavuk:0};
-      if(!aVeri[ak])aVeri[ak]={Et:0,Tavuk:0};
+      if(!gVeri[t])gVeri[t]={Et:0,Tavuk:0,Zayi:0};
+      if(!hVeri[hk])hVeri[hk]={Et:0,Tavuk:0,Zayi:0};
+      if(!aVeri[ak])aVeri[ak]={Et:0,Tavuk:0,Zayi:0};
       gVeri[t][kat]+=takozKg;hVeri[hk][kat]+=takozKg;aVeri[ak][kat]+=takozKg;
+    }
+    // Zayi (tarihe göre, tüketime dahil edilmez)
+    if(zayiKg>0&&u.zayi_tarihi&&u.zayi_tarihi!=='-'){
+      const t=u.zayi_tarihi;const[d,m,y]=t.split('.');
+      const dt=new Date(+y,m-1,+d);
+      const hk=`${y} - ${haftaNo(dt)}. Hafta`;
+      const ak=`${y} - ${m} (${AYLAR[m]||''})`;
+      if(!gVeri[t])gVeri[t]={Et:0,Tavuk:0,Zayi:0};
+      if(!hVeri[hk])hVeri[hk]={Et:0,Tavuk:0,Zayi:0};
+      if(!aVeri[ak])aVeri[ak]={Et:0,Tavuk:0,Zayi:0};
+      gVeri[t].Zayi+=zayiKg;hVeri[hk].Zayi+=zayiKg;aVeri[ak].Zayi+=zayiKg;
     }
   });
 
   const bos=(n)=>`<tr><td colspan="${n}" style="text-align:center;color:var(--muted);padding:20px">Veri yok</td></tr>`;
   const gS=Object.keys(gVeri).sort((a,b)=>ts(b)-ts(a));
-  document.getElementById('tb-gunluk').innerHTML=gS.length?gS.map(k=>`<tr><td>${k}</td><td>${f(gVeri[k].Et)}</td><td>${f(gVeri[k].Tavuk)}</td><td><b>${f(gVeri[k].Et+gVeri[k].Tavuk)}</b></td></tr>`).join(''):bos(4);
+  document.getElementById('tb-gunluk').innerHTML=gS.length?gS.map(k=>{const z=gVeri[k].Zayi||0;return`<tr><td>${k}</td><td>${f(gVeri[k].Et)}</td><td>${f(gVeri[k].Tavuk)}</td><td><b>${f(gVeri[k].Et+gVeri[k].Tavuk)}</b></td><td style="color:${z>0?'var(--yellow)':'var(--muted)'}">${f(z)}</td></tr>`}).join(''):bos(5);
   const hS=Object.keys(hVeri).sort().reverse();
-  document.getElementById('tb-haftalik').innerHTML=hS.length?hS.map(k=>`<tr><td>${k}</td><td>${f(hVeri[k].Et)}</td><td>${f(hVeri[k].Tavuk)}</td><td><b>${f(hVeri[k].Et+hVeri[k].Tavuk)}</b></td></tr>`).join(''):bos(4);
+  document.getElementById('tb-haftalik').innerHTML=hS.length?hS.map(k=>{const z=hVeri[k].Zayi||0;return`<tr><td>${k}</td><td>${f(hVeri[k].Et)}</td><td>${f(hVeri[k].Tavuk)}</td><td><b>${f(hVeri[k].Et+hVeri[k].Tavuk)}</b></td><td style="color:${z>0?'var(--yellow)':'var(--muted)'}">${f(z)}</td></tr>`}).join(''):bos(5);
   const aS=Object.keys(aVeri).sort().reverse();
-  document.getElementById('tb-aylik').innerHTML=aS.length?aS.map(k=>`<tr><td>${k}</td><td>${f(aVeri[k].Et)}</td><td>${f(aVeri[k].Tavuk)}</td><td><b>${f(aVeri[k].Et+aVeri[k].Tavuk)}</b></td></tr>`).join(''):bos(4);
+  document.getElementById('tb-aylik').innerHTML=aS.length?aS.map(k=>{const z=aVeri[k].Zayi||0;return`<tr><td>${k}</td><td>${f(aVeri[k].Et)}</td><td>${f(aVeri[k].Tavuk)}</td><td><b>${f(aVeri[k].Et+aVeri[k].Tavuk)}</b></td><td style="color:${z>0?'var(--yellow)':'var(--muted)'}">${f(z)}</td></tr>`}).join(''):bos(5);
   const kS=Object.keys(kVeri).sort((a,b)=>ts(b)-ts(a));
   document.getElementById('tb-gelen').innerHTML=kS.length?kS.map(k=>{
     const d=kVeri[k],top=d.k15+d.k30+d.k40+d.kd;
