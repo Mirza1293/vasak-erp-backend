@@ -114,6 +114,9 @@ class UrunGuncelle(BaseModel):
     kuvet_miktar: Optional[float] = None
     takoz_miktar: Optional[float] = None
     zayi_miktar: Optional[float] = None
+    zayi_tarihi: Optional[str] = None
+    barkod: Optional[str] = None
+    gelis_tarihi: Optional[str] = None
 
 @app.put("/api/urunler/{urun_id}")
 async def urun_guncelle(urun_id: int, g: UrunGuncelle, _=Depends(token_kontrol)):
