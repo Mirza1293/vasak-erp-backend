@@ -197,6 +197,7 @@ header h2{font-size:15px;flex:1;font-weight:800}
     <button class="tab-btn" onclick="tab('tavuk',this)">🍗 Tavuk</button>
     <button class="tab-btn" onclick="tab('yeni',this)">➕ Ekle</button>
     <button class="tab-btn" onclick="tab('analiz',this)">📊 Analiz</button>
+    <button class="tab-btn" onclick="tab('transfer',this);transferYukle()">🔄 Transfer</button>
   </div>
 
   <!-- DASHBOARD -->
@@ -306,6 +307,36 @@ header h2{font-size:15px;flex:1;font-weight:800}
 
     <button class="btn-ghost" onclick="yukle()">🔄 Yenile</button>
   </div>
+
+  <!-- TRANSFER -->
+  <div id="tab-transfer" class="tab-icerik">
+    <!-- Özet kartları -->
+    <div class="kart-grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="kart" style="border-left:4px solid var(--orange);padding:14px">
+        <h3 style="font-size:12px;color:var(--muted);margin-bottom:6px">→ Toplam Çıkış</h3>
+        <div id="tr-cikis-top" class="deger" style="font-size:18px;color:var(--orange)">0,00 kg</div>
+      </div>
+      <div class="kart" style="border-left:4px solid var(--green);padding:14px">
+        <h3 style="font-size:12px;color:var(--muted);margin-bottom:6px">← Toplam Giriş</h3>
+        <div id="tr-giris-top" class="deger" style="font-size:18px;color:var(--green)">0,00 kg</div>
+      </div>
+      <div class="kart" style="border-left:4px solid var(--blue);padding:14px">
+        <h3 style="font-size:12px;color:var(--muted);margin-bottom:6px">Net Bakiye</h3>
+        <div id="tr-net" class="deger" style="font-size:18px">0,00 kg</div>
+      </div>
+    </div>
+    <!-- Filtre butonları -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button id="tr-btn-hepsi" class="etiket aktif" style="cursor:pointer;background:rgba(250,179,135,.2);color:var(--orange);border:1px solid rgba(250,179,135,.3);padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700" onclick="transferFiltrele('hepsi')">Tümü</button>
+      <button id="tr-btn-cikis" class="etiket" style="cursor:pointer;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid var(--border);color:var(--muted)" onclick="transferFiltrele('Çıkış')">→ Çıkış</button>
+      <button id="tr-btn-giris" class="etiket" style="cursor:pointer;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid var(--border);color:var(--muted)" onclick="transferFiltrele('Giriş')">← Giriş</button>
+    </div>
+    <!-- Mobil: kart listesi -->
+    <div class="urun-liste" id="tr-liste"></div>
+    <!-- Masaüstü: tablo -->
+    <div class="urun-tablo-wrap" id="tr-tablo-wrap"></div>
+    <button class="btn-ghost" style="margin-top:12px" onclick="transferYukle()">🔄 Yenile</button>
+  </div>
 </div>
 
 <!-- DÜZENLE MODAL -->
@@ -329,6 +360,23 @@ header h2{font-size:15px;flex:1;font-weight:800}
       <div style="background:rgba(249,226,175,.08);border:1px solid rgba(249,226,175,.3);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px">
         <div style="font-size:12px;font-weight:800;color:var(--yellow);text-transform:uppercase;letter-spacing:.5px">⚠️ Zayi (Stoktan Düşer, Analize Dahil Edilmez)</div>
         <div><label>Zayi Miktar — kg</label><input id="m-zayi-kg" type="number" step="0.01" min="0" placeholder="0.00"></div>
+      </div>
+      <div style="background:rgba(166,227,161,.08);border:1px solid rgba(166,227,161,.3);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:12px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.5px">🔄 Transfer (Tüketime Dahil Edilmez)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label>Miktar — kg</label><input id="m-transfer-kg" type="number" step="0.01" min="0" placeholder="0.00"></div>
+          <div><label>Tarih</label><input id="m-transfer-tar" type="date"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><label>Yön</label>
+            <select id="m-transfer-yon" style="background:var(--surface2);color:var(--text);border:1.5px solid var(--border);border-radius:10px;padding:8px 10px;font-size:14px;width:100%">
+              <option value="">— Seç —</option>
+              <option value="Çıkış">→ Çıkış</option>
+              <option value="Giriş">← Giriş</option>
+            </select>
+          </div>
+          <div><label>İşletme Adı</label><input id="m-transfer-isletme" type="text" placeholder="İşletme adı..."></div>
+        </div>
       </div>
       <div><label>Kalan Miktar — kg (manuel)</label><input id="m-kal" type="number" step="0.01" min="0" placeholder="0.00"></div>
     </div>
@@ -479,7 +527,11 @@ function liste(kat){
     const kal=u.kalan_miktar||0,ilk=u.ilk_miktar||0,o=ilk>0?kal/ilk:0;
     const sc=kal===0?'bitti':o<=.2?'kritik':'kalan';
     const yuzde=ilk>0?Math.round((1-o)*100):0;
-    return`<div class="urun-kart" onclick="modalAc(${u.id})">
+    const trMik=u.transfer_miktar||0;
+    const trYon=u.transfer_yon||'-';
+    const kartSinir=trMik>0&&trYon==='Çıkış'?'rgba(250,179,135,.4)':trMik>0&&trYon==='Giriş'?'rgba(166,227,161,.4)':'var(--border)';
+    const kartBg=trMik>0&&trYon==='Çıkış'?'rgba(45,26,10,.4)':trMik>0&&trYon==='Giriş'?'rgba(10,45,21,.4)':'var(--surface)';
+    return`<div class="urun-kart" style="border-color:${kartSinir};background:${kartBg}" onclick="modalAc(${u.id})">
       <div class="ust"><span class="barkod">${u.barkod}</span><span class="tarih">📅 ${u.gelis_tarihi||'-'}</span></div>
       <div class="alt">
         <span class="etiket ilk">İlk: ${f(ilk)} kg</span>
@@ -487,6 +539,7 @@ function liste(kat){
         <span class="etiket" style="background:rgba(203,166,247,.15);color:var(--purple)">%${yuzde}</span>
         ${u.kullanim_tarihi&&u.kullanim_tarihi!=='-'?`<span class="etiket" style="background:rgba(166,227,161,.15);color:var(--green)">🗓 ${u.kullanim_tarihi}</span>`:''}
         ${u.zayi_miktar>0?`<span class="etiket" style="background:rgba(249,226,175,.15);color:var(--yellow)">⚠️ Zayi: ${f(u.zayi_miktar)} kg</span>`:''}
+        ${trMik>0?`<span class="etiket" style="background:${trYon==='Çıkış'?'rgba(250,179,135,.15)':'rgba(166,227,161,.15)'};color:${trYon==='Çıkış'?'var(--orange)':'var(--green)'}">${trYon==='Çıkış'?'→':'←'} Transfer: ${f(trMik)} kg · ${u.transfer_isletme||'-'}</span>`:''}
       </div></div>`;
   }).join('');
 
@@ -572,6 +625,7 @@ function liste(kat){
         <td>%${yuzde}</td>
         <td class="${(u.zayi_miktar||0)>0?'td-zayi':''}">${f(u.zayi_miktar||0)}</td>
         <td>${u.zayi_tarihi||'-'}</td>
+        <td style="color:${(u.transfer_miktar||0)>0?(u.transfer_yon==='Çıkış'?'var(--orange)':'var(--green)'):'inherit'};font-weight:${(u.transfer_miktar||0)>0?700:400}">${(u.transfer_miktar||0)>0?((u.transfer_yon==='Çıkış'?'→ ':'← ')+f(u.transfer_miktar||0)+' kg · '+(u.transfer_isletme||'-')):'-'}</td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;
@@ -696,6 +750,10 @@ function modalAc(id){
   document.getElementById('m-kuvet-kg').value='';
   document.getElementById('m-takoz-kg').value='';
   document.getElementById('m-zayi-kg').value='';
+  document.getElementById('m-transfer-kg').value=u.transfer_miktar>0?u.transfer_miktar:'';
+  document.getElementById('m-transfer-tar').value=dmy2iso(u.transfer_tarihi||'-');
+  document.getElementById('m-transfer-yon').value=u.transfer_yon||'';
+  document.getElementById('m-transfer-isletme').value=u.transfer_isletme||'';
   document.getElementById('m-kal').value=u.kalan_miktar||'';
   document.getElementById('modal-overlay').classList.add('acik');
 }
@@ -715,7 +773,26 @@ function guncelle(){
   if(!isNaN(kuvetKg)&&kuvetKg>0) p.kuvet_miktar=kuvetKg;
   if(!isNaN(takozKg)&&takozKg>0) p.takoz_miktar=takozKg;
   if(!isNaN(zayiKg)&&zayiKg>0) p.zayi_miktar=zayiKg;
-  if(!isNaN(kal)&&kal>=0) p.kalan_miktar=kal;
+  const transferKg=parseFloat(document.getElementById('m-transfer-kg').value);
+  const transferTar=document.getElementById('m-transfer-tar').value;
+  const transferYon=document.getElementById('m-transfer-yon').value;
+  const transferIsletme=document.getElementById('m-transfer-isletme').value.trim();
+  if(!isNaN(transferKg)&&transferKg>0) p.transfer_miktar=transferKg;
+  if(transferTar) p.transfer_tarihi=iso2dmy(transferTar);
+  if(transferYon) p.transfer_yon=transferYon;
+  if(transferIsletme) p.transfer_isletme=transferIsletme;
+  // Kalan otomatik hesapla
+  const uAktif=urunler.find(x=>x.id===aktifId);
+  if(uAktif&&!(!isNaN(kal)&&kal>=0&&document.getElementById('m-kal').value!=='')){
+    const ilk=uAktif.ilk_miktar||0;
+    const kuv=(!isNaN(kuvetKg)&&kuvetKg>0)?kuvetKg:(uAktif.kuvet_miktar||0);
+    const tak=(!isNaN(takozKg)&&takozKg>0)?takozKg:(uAktif.takoz_miktar||0);
+    const zay=(!isNaN(zayiKg)&&zayiKg>0)?zayiKg:(uAktif.zayi_miktar||0);
+    const trf=(!isNaN(transferKg)&&transferKg>0)?transferKg:(uAktif.transfer_miktar||0);
+    const kalanHesap=Math.max(0,ilk-kuv-tak-zay-trf-(ilk-uAktif.kalan_miktar-kuv-tak-zay-trf<0?0:0));
+    p.kalan_miktar=Math.max(0,uAktif.ilk_miktar-kuv-tak-zay-trf);
+  }
+  if(!isNaN(kal)&&kal>=0&&document.getElementById('m-kal').value!=='') p.kalan_miktar=kal;
   req(`/api/urunler/${aktifId}`,'PUT',p)
     .then(()=>{toast('✅ Güncellendi!');document.getElementById('modal-overlay').classList.remove('acik');yukle()})
     .catch(e=>toast('Hata: '+e,true));
@@ -888,6 +965,99 @@ document.addEventListener('keydown', e => {
   if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) { e.preventDefault(); yukle(); }
   if (e.key === 'Escape') { document.getElementById('modal-overlay').classList.remove('acik'); }
 });
+
+// ── TRANSFER ──
+let trFiltre='hepsi';
+
+function transferFiltrele(filtre){
+  trFiltre=filtre;
+  const btns={hepsi:'tr-btn-hepsi',Çıkış:'tr-btn-cikis',Giriş:'tr-btn-giris'};
+  Object.entries(btns).forEach(([k,id])=>{
+    const btn=document.getElementById(id);
+    if(!btn) return;
+    if(k===filtre){
+      btn.style.background='rgba(250,179,135,.2)';btn.style.color='var(--orange)';
+      btn.style.borderColor='rgba(250,179,135,.3)';
+    } else {
+      btn.style.background='transparent';btn.style.color='var(--muted)';
+      btn.style.borderColor='var(--border)';
+    }
+  });
+  transferRender();
+}
+
+function transferYukle(){
+  req('/api/urunler').then(d=>{
+    urunler=d.urunler;
+    transferRender();
+  }).catch(e=>toast('Yüklenemedi: '+e,true));
+}
+
+function transferRender(){
+  const liste=urunler.filter(u=>{
+    const mik=u.transfer_miktar||0;
+    const yon=u.transfer_yon||'-';
+    if(mik<=0||yon==='-') return false;
+    if(trFiltre!=='hepsi'&&yon!==trFiltre) return false;
+    return true;
+  }).sort((a,b)=>ts(b.transfer_tarihi||'-')-ts(a.transfer_tarihi||'-'));
+
+  // Özet
+  const topCikis=liste.filter(u=>u.transfer_yon==='Çıkış').reduce((s,u)=>s+(u.transfer_miktar||0),0);
+  const topGiris=liste.filter(u=>u.transfer_yon==='Giriş').reduce((s,u)=>s+(u.transfer_miktar||0),0);
+  const net=topGiris-topCikis;
+  document.getElementById('tr-cikis-top').textContent=f(topCikis)+' kg';
+  document.getElementById('tr-giris-top').textContent=f(topGiris)+' kg';
+  const netEl=document.getElementById('tr-net');
+  netEl.textContent=(net>=0?'+':'')+f(net)+' kg';
+  netEl.style.color=net>=0?'var(--green)':'var(--orange)';
+
+  // Mobil kartlar
+  const elListe=document.getElementById('tr-liste');
+  if(!liste.length){elListe.innerHTML='<div class="bos">🔄<br>Transfer kaydı yok.</div>';
+    document.getElementById('tr-tablo-wrap').innerHTML='';return;}
+
+  elListe.innerHTML=liste.map(u=>{
+    const yon=u.transfer_yon||'-';
+    const renk=yon==='Çıkış'?'var(--orange)':'var(--green)';
+    const bg=yon==='Çıkış'?'rgba(250,179,135,.08)':'rgba(166,227,161,.08)';
+    const sinir=yon==='Çıkış'?'rgba(250,179,135,.3)':'rgba(166,227,161,.3)';
+    return`<div class="urun-kart" style="border-color:${sinir};background:${bg}" onclick="modalAc(${u.id})">
+      <div class="ust"><span class="barkod">${u.barkod}</span><span class="tarih" style="color:${renk}">${yon==='Çıkış'?'→':'←'} ${u.transfer_tarihi||'-'}</span></div>
+      <div class="alt">
+        <span class="etiket" style="background:${bg};color:${renk}">${yon==='Çıkış'?'→ Çıkış':'← Giriş'}: ${f(u.transfer_miktar||0)} kg</span>
+        <span class="etiket">${u.transfer_isletme||'-'}</span>
+        <span class="etiket" style="color:var(--muted)">${u.kategori}</span>
+        <span class="etiket" style="color:var(--muted)">Kalan: ${f(u.kalan_miktar||0)} kg</span>
+      </div></div>`;
+  }).join('');
+
+  // Masaüstü tablo
+  const tabloWrap=document.getElementById('tr-tablo-wrap');
+  tabloWrap.innerHTML=`<table class="urun-tablo">
+    <thead><tr>
+      <th>Tarih</th><th>Barkod</th><th>Kategori</th><th>Miktar (kg)</th>
+      <th>Yön</th><th>İşletme</th><th>Kalan (kg)</th>
+    </tr></thead>
+    <tbody>${liste.map(u=>{
+      const yon=u.transfer_yon||'-';
+      const renk=yon==='Çıkış'?'#FAB387':'#A6E3A1';
+      const bg=yon==='Çıkış'?'rgba(45,26,10,.6)':'rgba(10,45,21,.6)';
+      return`<tr style="background:${bg}" onclick="modalAc(${u.id})">
+        <td>${u.transfer_tarihi||'-'}</td>
+        <td class="td-barkod">${u.barkod}</td>
+        <td>${u.kategori}</td>
+        <td style="color:${renk};font-weight:700">${f(u.transfer_miktar||0)} kg</td>
+        <td style="color:${renk}">${yon==='Çıkış'?'→ Çıkış':'← Giriş'}</td>
+        <td>${u.transfer_isletme||'-'}</td>
+        <td>${f(u.kalan_miktar||0)} kg</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// Et/Tavuk kartlarında transfer etiketi - liste() fonksiyonu bunu zaten gösteriyor
+// Kart rengi için liste() fonksiyonunu güncelle
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
 </body>
