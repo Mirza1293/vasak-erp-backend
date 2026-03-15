@@ -43,7 +43,7 @@ def iso2dmy(iso: str) -> str:
 
 def supabase_tarihleri_dmy(u: dict) -> dict:
     for alan in ["gelis_tarihi", "kullanim_tarihi", "tekrar_kullanim_tarihi",
-                 "kuvet_kullanim_tarihi", "takoz_kullanim_tarihi", "zayi_tarihi"]:
+                 "kuvet_kullanim_tarihi", "takoz_kullanim_tarihi", "zayi_tarihi", "transfer_tarihi"]:
         if alan in u and u[alan]:
             val = u[alan]
             if isinstance(val, str) and len(val) == 10 and val[4] == "-":
@@ -117,6 +117,10 @@ class UrunGuncelle(BaseModel):
     zayi_tarihi: Optional[str] = None
     barkod: Optional[str] = None
     gelis_tarihi: Optional[str] = None
+    transfer_miktar: Optional[float] = None
+    transfer_tarihi: Optional[str] = None
+    transfer_yon: Optional[str] = None
+    transfer_isletme: Optional[str] = None
 
 @app.put("/api/urunler/{urun_id}")
 async def urun_guncelle(urun_id: int, g: UrunGuncelle, _=Depends(token_kontrol)):
