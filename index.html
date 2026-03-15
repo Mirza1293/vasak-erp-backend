@@ -28,6 +28,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 /* Sağ tık ve seçim engeli */
 *{-webkit-touch-callout:none}
 input,textarea{user-select:text;-webkit-user-select:text}
+/* SAĞ TIK MENÜ */
+#sag-tik-menu{position:fixed;z-index:9999;background:var(--surface);border:1px solid #45475A;border-radius:10px;padding:4px;min-width:180px;box-shadow:0 4px 20px rgba(0,0,0,.4);display:none}
+#sag-tik-menu.aktif{display:block}
+.stm-item{padding:9px 16px;border-radius:7px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--text)}
+.stm-item:hover{background:var(--border)}
+.stm-item.kirmizi{color:var(--red)}
+.stm-item.yesil{color:var(--green)}
+.stm-ayrac{height:1px;background:var(--border);margin:3px 8px}
 
 /* SPLASH */
 #splash{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;transition:opacity .5s ease;pointer-events:none}
@@ -157,6 +165,15 @@ header h2{font-size:15px;flex:1;font-weight:800}
 </style>
 </head>
 <body>
+<!-- SAĞ TIK MENÜ -->
+<div id="sag-tik-menu">
+  <div class="stm-item" onclick="stmDuzenle()">✏️ Düzenle / Modal Aç</div>
+  <div class="stm-item" onclick="stmKopyala()">📋 Kopyala</div>
+  <div class="stm-ayrac"></div>
+  <div class="stm-item yesil" id="stm-transfer-btn" onclick="stmTransfer()">🔄 Transfer Yap</div>
+  <div class="stm-ayrac"></div>
+  <div class="stm-item kirmizi" onclick="stmSil()">🗑 Sil</div>
+</div>
 <!-- PWA Masaüstü Başlık Çubuğu -->
 <div id="pwa-titlebar" style="display:none">
   <span style="font-size:16px;margin-right:8px">🐱</span>
@@ -946,9 +963,121 @@ window.addEventListener('load',()=>{
   document.getElementById('y-gelis').valueAsDate=new Date();
 });
 </script>
-<script>// ── PWA MASAÜSTÜ DAVRANIŞI ──
+<script>// ── SAĞ TIK MENÜ ──
+let _stmId = null;
+
+function stmKapat(){
+  document.getElementById('sag-tik-menu').classList.remove('aktif');
+  _stmId = null;
+}
+
+document.addEventListener('click', stmKapat);
+document.addEventListener('scroll', stmKapat);
+
+// Kart ve tablo satırlarına sağ tık
+document.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  // Ürün bul (kart veya tablo satırı)
+  const kart = e.target.closest('.urun-kart');
+  const satir = e.target.closest('tbody tr');
+  let id = null;
+  if(kart){
+    const onclick = kart.getAttribute('onclick') || '';
+    const m = onclick.match(/modalAc\((\d+)\)/);
+    if(m) id = parseInt(m[1]);
+  } else if(satir){
+    const onclick = satir.getAttribute('onclick') || '';
+    const m = onclick.match(/modalAc\((\d+)\)/);
+    if(m) id = parseInt(m[1]);
+  }
+  if(!id) return;
+  _stmId = id;
+
+  // Transfer durumu
+  const u = urunler.find(x=>x.id===id);
+  const transferVar = u && (u.transfer_miktar||0) > 0 && u.transfer_yon && u.transfer_yon !== '-';
+  const btn = document.getElementById('stm-transfer-btn');
+  if(transferVar){
+    btn.textContent = '🔄 Transfer İptal Et';
+    btn.className = 'stm-item kirmizi';
+  } else {
+    btn.textContent = '🔄 Transfer Yap';
+    btn.className = 'stm-item yesil';
+  }
+
+  // Pozisyon
+  const menu = document.getElementById('sag-tik-menu');
+  menu.style.top = Math.min(e.clientY, window.innerHeight - 220) + 'px';
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+  menu.classList.add('aktif');
+});
+
+function stmDuzenle(){
+  stmKapat();
+  if(_stmId) modalAc(_stmId);
+}
+
+function stmKopyala(){
+  stmKapat();
+  if(!_stmId) return;
+  const u = urunler.find(x=>x.id===_stmId);
+  if(!u) return;
+  const metin = `ID: ${u.id}
+Barkod: ${u.barkod}
+Kategori: ${u.kategori}
+İlk: ${f(u.ilk_miktar||0)} kg
+Kalan: ${f(u.kalan_miktar||0)} kg`;
+  navigator.clipboard.writeText(metin).then(()=>toast('📋 Kopyalandı!')).catch(()=>toast('Kopyalanamadı',true));
+}
+
+function stmTransfer(){
+  stmKapat();
+  if(!_stmId) return;
+  const u = urunler.find(x=>x.id===_stmId);
+  if(!u) return;
+  const transferVar = (u.transfer_miktar||0) > 0 && u.transfer_yon && u.transfer_yon !== '-';
+  if(transferVar){
+    // İptal
+    if(!confirm('Transferi iptal etmek istiyor musunuz?\nKalan miktar yeniden hesaplanacak.')) return;
+    const yeniKalan = Math.max(0, (u.ilk_miktar||0)-(u.kuvet_miktar||0)-(u.takoz_miktar||0)-(u.zayi_miktar||0));
+    req(`/api/urunler/${_stmId}`,'PUT',{
+      transfer_miktar:0, transfer_tarihi:'-', transfer_yon:'-', transfer_isletme:'-', kalan_miktar:yeniKalan
+    }).then(()=>{toast('✅ Transfer iptal edildi');yukle()}).catch(e=>toast('Hata: '+e,true));
+  } else {
+    // Transfer formu göster
+    _transferFormAc(_stmId);
+  }
+}
+
+function _transferFormAc(id){
+  const u = urunler.find(x=>x.id===id);
+  if(!u) return;
+  // Basit prompt-tabanlı form (modal yerine)
+  const mik = parseFloat(prompt(`${u.barkod}\nKalan: ${f(u.kalan_miktar||0)} kg\n\nTransfer miktarı (kg):`, ''));
+  if(isNaN(mik)||mik<=0){toast('Geçersiz miktar',true);return;}
+  const tarih = prompt('Transfer tarihi (GG.AA.YYYY):', new Date().toLocaleDateString('tr-TR'));
+  if(!tarih) return;
+  const yon = prompt('Yön (Çıkış / Giriş):', 'Çıkış');
+  if(yon !== 'Çıkış' && yon !== 'Giriş'){toast('Geçersiz yön',true);return;}
+  const isl = prompt('İşletme adı:', '') || '-';
+  const yeniKalan = Math.max(0,(u.ilk_miktar||0)-(u.kuvet_miktar||0)-(u.takoz_miktar||0)-(u.zayi_miktar||0)-mik);
+  req(`/api/urunler/${id}`,'PUT',{
+    transfer_miktar:mik, transfer_tarihi:tarih, transfer_yon:yon,
+    transfer_isletme:isl, kalan_miktar:yeniKalan
+  }).then(()=>{toast('✅ Transfer kaydedildi');yukle()}).catch(e=>toast('Hata: '+e,true));
+}
+
+function stmSil(){
+  stmKapat();
+  if(!_stmId) return;
+  if(!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+  req(`/api/urunler/${_stmId}`,'DELETE')
+    .then(()=>{toast('🗑 Silindi');yukle()}).catch(e=>toast('Hata: '+e,true));
+}
+
+// ── PWA MASAÜSTÜ DAVRANIŞI ──
 // Sağ tık menüsünü kapat
-document.addEventListener('contextmenu', e => e.preventDefault());
+// contextmenu sağ tık menüsü için yönetiliyor (stm)
 
 // Window Controls Overlay aktifse titlebar'ı göster
 if ('windowControlsOverlay' in navigator) {
