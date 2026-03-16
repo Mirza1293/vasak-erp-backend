@@ -1,4 +1,4 @@
-const CACHE = 'vasak-erp-v16';
+const CACHE = 'vasak-erp-v19';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/vasak_192.png', '/vasak_512.png'];
 
 self.addEventListener('install', e => {
