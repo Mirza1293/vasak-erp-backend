@@ -1,4 +1,4 @@
-name = "vasak-erp-api"
+name = "vasak-erp-backend"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
