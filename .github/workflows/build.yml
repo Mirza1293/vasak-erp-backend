@@ -48,27 +48,12 @@ jobs:
         run: |
           python -m PyInstaller --onefile --windowed --name "StockFlow_v15" masaustu_v15.py
 
-      - name: Exe mimarisi kontrol
-        run: |
-          $bytes = [System.IO.File]::ReadAllBytes("dist/StockFlow_v15.exe")
-          $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3C)
-          $machine = [System.BitConverter]::ToUInt16($bytes, $peOffset + 4)
-          if ($machine -eq 0x8664) { Write-Host "64-bit AMD64 OK" }
-          elseif ($machine -eq 0x14c) { Write-Host "32-bit i386" }
-          else { Write-Host "Unknown: $machine (PE offset: $peOffset)" }
-        shell: pwsh
-
-      - name: Zip yap
-        run: |
-          Compress-Archive -Path dist/StockFlow_v15.exe -DestinationPath StockFlow_v15.zip
-        shell: pwsh
-
       - name: Release oluştur
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VER }}
           name: StockFlow ${{ steps.version.outputs.VER }}
-          files: StockFlow_v15.zip
+          files: dist/StockFlow_v15.exe
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
