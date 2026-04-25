@@ -74,7 +74,7 @@ TEMALAR = {
 AKTIF_TEMA = "Maviş"
 UYGULAMA_VERSIYON = "v1.6"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
-GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.zip"
+GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
 # ─────────────────────────────────────────
 #  API İSTEMCİSİ
@@ -831,40 +831,23 @@ class StokSistemi(QMainWindow):
     def _guncelleme_tamamlandi(self, dosya_yolu):
         self.lbl_durum.setText("✅ Güncelleme hazır!")
         try:
-            import zipfile, subprocess, tempfile, shutil
-            # Zip'i temp klasörüne aç
-            temp_dir = tempfile.mkdtemp()
-            with zipfile.ZipFile(dosya_yolu, 'r') as z:
-                z.extractall(temp_dir)
-            # Exe'yi bul
-            yeni_exe_temp = os.path.join(temp_dir, "StockFlow_v15.exe")
-            if not os.path.exists(yeni_exe_temp):
-                # İçinde klasör olabilir
-                for root, dirs, files in os.walk(temp_dir):
-                    for f in files:
-                        if f.endswith(".exe"):
-                            yeni_exe_temp = os.path.join(root, f)
-                            break
-            if not os.path.exists(yeni_exe_temp):
-                QMessageBox.warning(self, "Uyarı", "Zip içinde exe bulunamadı.")
-                return
-            # Exe'yi çalışma dizinine kopyala
+            import subprocess, shutil, tempfile
             hedef_klasor = calisma_dizini_bul()
             hedef_exe = os.path.join(hedef_klasor, "StockFlow_v15.exe")
-            # Mevcut exe'yi yenisiyle değiştir (bat script ile)
+            # Bat ile: bekle → kopyala → başlat
             bat_icerik = (
-                f'@echo off\n'
-                f'timeout /t 2 /nobreak >nul\n'
-                f'copy /y "{yeni_exe_temp}" "{hedef_exe}"\n'
-                f'start "" "{hedef_exe}"\n'
-                f'del "%~f0"\n'
+                "@echo off\r\n"
+                "timeout /t 2 /nobreak >nul\r\n"
+                f'copy /y "{dosya_yolu}" "{hedef_exe}"\r\n'
+                f'start "" "{hedef_exe}"\r\n'
+                "del %~f0\r\n"
             )
-            bat_yol = os.path.join(temp_dir, "guncelle.bat")
+            bat_yol = os.path.join(tempfile.gettempdir(), "sf_guncelle.bat")
             with open(bat_yol, 'w', encoding='cp1254') as f:
                 f.write(bat_icerik)
             QMessageBox.information(self, "Güncelleme Hazır",
                 "Güncelleme tamamlandı!\nUygulama yeniden başlatılacak.")
-            subprocess.Popen([bat_yol], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            subprocess.Popen(f'cmd /c "{bat_yol}"', shell=True)
             QApplication.quit()
         except Exception as e:
             QMessageBox.critical(self, "Hata", f"Güncelleme hatası: {e}")
