@@ -1,7 +1,5 @@
-// VAŞAK ERP v15.0 Maviş — Cloudflare Worker
+// VAŞAK ERP v15.0 Maviş — Cloudflare Worker + D1
 
-const SUPABASE_URL = "https://qpqxqokovvudtjuyymkn.supabase.co";
-const SUPABASE_KEY = "sb_publishable_7nTQXiYaTJ49pyDQ0TuCLw_pMqy9aE1";
 const JWT_SECRET = "vasak_gizli_anahtar_2025";
 const VASAK_SIFRE = "123456";
 
@@ -44,27 +42,6 @@ function json(data, status = 200) {
 
 function hata(mesaj, status = 400) { return json({ detail: mesaj }, status); }
 
-function sbH() {
-  return {
-    "apikey": SUPABASE_KEY,
-    "Authorization": `Bearer ${SUPABASE_KEY}`,
-    "Content-Type": "application/json",
-    "Prefer": "return=representation"
-  };
-}
-
-function iso2dmy(iso) {
-  if (!iso || iso === "-") return "-";
-  try { const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; } catch { return iso; }
-}
-
-function tarihlerDmy(u) {
-  for (const a of ["gelis_tarihi","kullanim_tarihi","tekrar_kullanim_tarihi","kuvet_kullanim_tarihi","takoz_kullanim_tarihi","zayi_tarihi","transfer_tarihi"]) {
-    if (u[a] && typeof u[a] === "string" && u[a].length === 10 && u[a][4] === "-") u[a] = iso2dmy(u[a]);
-  }
-  return u;
-}
-
 async function tkontrol(req) {
   const auth = req.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) return false;
@@ -72,15 +49,24 @@ async function tkontrol(req) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+    const DB = env.DB;
 
-    if (method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization" } });
+    if (method === "OPTIONS") return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      }
+    });
 
     if (path === "/" || path === "/api/saglik") return json({ sistem: "VAŞAK ERP", versiyon: "v15.0 Maviş", durum: "çalışıyor 🐱" });
 
+    // ── GİRİŞ ──
     if (path === "/api/giris" && method === "POST") {
       try {
         const body = await request.json();
@@ -93,56 +79,69 @@ export default {
 
     if (!(await tkontrol(request))) return hata("Geçersiz token", 401);
 
+    // ── ÜRÜNLER ──
     if (path === "/api/urunler") {
       if (method === "GET") {
         try {
-          const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler?select=*&order=id.desc`, { headers: sbH() });
-          if (!r.ok) return hata("Supabase: " + await r.text(), 500);
-          const liste = (await r.json()).map(tarihlerDmy);
-          return json({ urunler: liste, toplam: liste.length });
-        } catch (e) { return hata("Hata: " + e.message, 500); }
+          const { results } = await DB.prepare("SELECT * FROM urunler ORDER BY id DESC").all();
+          return json({ urunler: results, toplam: results.length });
+        } catch (e) { return hata("DB hatası: " + e.message, 500); }
       }
+
       if (method === "POST") {
         try {
           const u = await request.json();
-          const veri = { barkod: u.barkod, kategori: u.kategori, gelis_tarihi: u.gelis_tarihi || "-", ilk_miktar: u.ilk_miktar || 0, kalan_miktar: u.kalan_miktar ?? u.ilk_miktar ?? 0 };
-          const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler`, { method: "POST", headers: sbH(), body: JSON.stringify(veri) });
-          if (![200, 201].includes(r.status)) return hata("Supabase: " + await r.text(), 500);
+          await DB.prepare(`
+            INSERT INTO urunler (barkod, kategori, gelis_tarihi, ilk_miktar, kalan_miktar)
+            VALUES (?, ?, ?, ?, ?)
+          `).bind(
+            u.barkod, u.kategori, u.gelis_tarihi || "-",
+            u.ilk_miktar || 0, u.kalan_miktar ?? u.ilk_miktar ?? 0
+          ).run();
           return json({ ok: true });
-        } catch (e) { return hata("Hata: " + e.message, 500); }
+        } catch (e) {
+          if (e.message.includes("UNIQUE")) return hata("Bu barkod zaten kayıtlı!", 409);
+          return hata("DB hatası: " + e.message, 500);
+        }
       }
     }
 
+    // ── ÜRÜN GÜNCELLE / SİL ──
     const m = path.match(/^\/api\/urunler\/(\d+)$/);
     if (m) {
-      const id = m[1];
+      const id = parseInt(m[1]);
+
       if (method === "PUT") {
         try {
           const g = await request.json();
-          const veri = Object.fromEntries(Object.entries(g).filter(([, v]) => v !== null && v !== undefined));
-          if (!Object.keys(veri).length) return hata("Güncellenecek alan yok", 400);
-          const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler?id=eq.${id}`, { method: "PATCH", headers: sbH(), body: JSON.stringify(veri) });
-          if (![200, 204].includes(r.status)) return hata("Supabase: " + await r.text(), 500);
+          const izinli = ["barkod","gelis_tarihi","kullanim_tarihi","tekrar_kullanim_tarihi",
+            "kuvet_kullanim_tarihi","kuvet_miktar","takoz_kullanim_tarihi","takoz_miktar",
+            "kalan_miktar","tekrar_miktar","zayi_miktar","zayi_tarihi",
+            "transfer_miktar","transfer_tarihi","transfer_yon","transfer_isletme"];
+          const alanlar = Object.entries(g).filter(([k, v]) => izinli.includes(k) && v !== null && v !== undefined);
+          if (!alanlar.length) return hata("Güncellenecek alan yok", 400);
+          const set = alanlar.map(([k]) => `${k} = ?`).join(", ");
+          const degerler = alanlar.map(([, v]) => v);
+          await DB.prepare(`UPDATE urunler SET ${set} WHERE id = ?`).bind(...degerler, id).run();
           return json({ ok: true });
-        } catch (e) { return hata("Hata: " + e.message, 500); }
+        } catch (e) { return hata("DB hatası: " + e.message, 500); }
       }
+
       if (method === "DELETE") {
         try {
-          const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler?id=eq.${id}`, { method: "DELETE", headers: sbH() });
-          if (![200, 204].includes(r.status)) return hata("Supabase: " + await r.text(), 500);
+          await DB.prepare("DELETE FROM urunler WHERE id = ?").bind(id).run();
           return json({ ok: true });
-        } catch (e) { return hata("Hata: " + e.message, 500); }
+        } catch (e) { return hata("DB hatası: " + e.message, 500); }
       }
     }
 
+    // ── ANALİZ ──
     if (path === "/api/analiz" && method === "GET") {
       try {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler?select=*`, { headers: sbH() });
-        if (!r.ok) return hata("Supabase hatası", 500);
-        const urunler = (await r.json()).map(tarihlerDmy);
+        const { results } = await DB.prepare("SELECT * FROM urunler").all();
         const bugun = new Date();
         const s7 = { Et: 0, Tavuk: 0 }, s30 = { Et: 0, Tavuk: 0 };
-        for (const u of urunler) {
+        for (const u of results) {
           const kat = u.kategori;
           if (!["Et", "Tavuk"].includes(kat)) continue;
           const tuk = Math.max(0, (u.ilk_miktar || 0) - (u.kalan_miktar || 0) - (u.zayi_miktar || 0));
@@ -159,7 +158,7 @@ export default {
           }
         }
         return json({ son_7_gun: s7, son_30_gun: s30 });
-      } catch (e) { return hata("Hata: " + e.message, 500); }
+      } catch (e) { return hata("DB hatası: " + e.message, 500); }
     }
 
     return hata("Endpoint bulunamadı", 404);
