@@ -1,5 +1,10 @@
 // VAŞAK ERP v15.0 Maviş — Cloudflare Worker
 
+const SUPABASE_URL = "https://qpqxqokovvudtjuyymkn.supabase.co";
+const SUPABASE_KEY = "sb_publishable_7nTQXiYaTJ49pyDQ0TuCLw_pMqy9aE1";
+const JWT_SECRET = "vasak_gizli_anahtar_2025";
+const VASAK_SIFRE = "123456";
+
 async function jwtImzala(payload, secret) {
   const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   const body = btoa(JSON.stringify(payload)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -38,10 +43,14 @@ function json(data, status = 200) {
 }
 
 function hata(mesaj, status = 400) { return json({ detail: mesaj }, status); }
-function g(env, key, fb = "") { return (env && env[key]) ? env[key] : fb; }
-function sbH(env) {
-  const k = g(env, "SUPABASE_KEY");
-  return { "apikey": k, "Authorization": `Bearer ${k}`, "Content-Type": "application/json", "Prefer": "return=representation" };
+
+function sbH() {
+  return {
+    "apikey": SUPABASE_KEY,
+    "Authorization": `Bearer ${SUPABASE_KEY}`,
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+  };
 }
 
 function iso2dmy(iso) {
@@ -56,14 +65,14 @@ function tarihlerDmy(u) {
   return u;
 }
 
-async function tkontrol(req, env) {
+async function tkontrol(req) {
   const auth = req.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) return false;
-  return await jwtDogrula(auth.slice(7), g(env, "JWT_SECRET", "vasak_gizli_anahtar_2025"));
+  return await jwtDogrula(auth.slice(7), JWT_SECRET);
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
@@ -75,21 +84,19 @@ export default {
     if (path === "/api/giris" && method === "POST") {
       try {
         const body = await request.json();
-        if (body.sifre !== g(env, "VASAK_SIFRE", "123456")) return hata("Hatalı şifre!", 401);
+        if (body.sifre !== VASAK_SIFRE) return hata("Hatalı şifre!", 401);
         const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
-        const token = await jwtImzala({ sub: "vasak", exp }, g(env, "JWT_SECRET", "vasak_gizli_anahtar_2025"));
+        const token = await jwtImzala({ sub: "vasak", exp }, JWT_SECRET);
         return json({ token });
       } catch (e) { return hata("Giriş hatası: " + e.message, 500); }
     }
 
-    if (!(await tkontrol(request, env))) return hata("Geçersiz token", 401);
-
-    const sbUrl = g(env, "SUPABASE_URL");
+    if (!(await tkontrol(request))) return hata("Geçersiz token", 401);
 
     if (path === "/api/urunler") {
       if (method === "GET") {
         try {
-          const r = await fetch(`${sbUrl}/rest/v1/urunler?select=*&order=id.desc`, { headers: sbH(env) });
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler?select=*&order=id.desc`, { headers: sbH() });
           if (!r.ok) return hata("Supabase: " + await r.text(), 500);
           const liste = (await r.json()).map(tarihlerDmy);
           return json({ urunler: liste, toplam: liste.length });
@@ -99,7 +106,7 @@ export default {
         try {
           const u = await request.json();
           const veri = { barkod: u.barkod, kategori: u.kategori, gelis_tarihi: u.gelis_tarihi || "-", ilk_miktar: u.ilk_miktar || 0, kalan_miktar: u.kalan_miktar ?? u.ilk_miktar ?? 0 };
-          const r = await fetch(`${sbUrl}/rest/v1/urunler`, { method: "POST", headers: sbH(env), body: JSON.stringify(veri) });
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler`, { method: "POST", headers: sbH(), body: JSON.stringify(veri) });
           if (![200, 201].includes(r.status)) return hata("Supabase: " + await r.text(), 500);
           return json({ ok: true });
         } catch (e) { return hata("Hata: " + e.message, 500); }
@@ -111,17 +118,17 @@ export default {
       const id = m[1];
       if (method === "PUT") {
         try {
-          const g2 = await request.json();
-          const veri = Object.fromEntries(Object.entries(g2).filter(([, v]) => v !== null && v !== undefined));
+          const g = await request.json();
+          const veri = Object.fromEntries(Object.entries(g).filter(([, v]) => v !== null && v !== undefined));
           if (!Object.keys(veri).length) return hata("Güncellenecek alan yok", 400);
-          const r = await fetch(`${sbUrl}/rest/v1/urunler?id=eq.${id}`, { method: "PATCH", headers: sbH(env), body: JSON.stringify(veri) });
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler?id=eq.${id}`, { method: "PATCH", headers: sbH(), body: JSON.stringify(veri) });
           if (![200, 204].includes(r.status)) return hata("Supabase: " + await r.text(), 500);
           return json({ ok: true });
         } catch (e) { return hata("Hata: " + e.message, 500); }
       }
       if (method === "DELETE") {
         try {
-          const r = await fetch(`${sbUrl}/rest/v1/urunler?id=eq.${id}`, { method: "DELETE", headers: sbH(env) });
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler?id=eq.${id}`, { method: "DELETE", headers: sbH() });
           if (![200, 204].includes(r.status)) return hata("Supabase: " + await r.text(), 500);
           return json({ ok: true });
         } catch (e) { return hata("Hata: " + e.message, 500); }
@@ -130,7 +137,7 @@ export default {
 
     if (path === "/api/analiz" && method === "GET") {
       try {
-        const r = await fetch(`${sbUrl}/rest/v1/urunler?select=*`, { headers: sbH(env) });
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/urunler?select=*`, { headers: sbH() });
         if (!r.ok) return hata("Supabase hatası", 500);
         const urunler = (await r.json()).map(tarihlerDmy);
         const bugun = new Date();
