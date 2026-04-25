@@ -21,6 +21,11 @@ jobs:
           python-version: '3.11'
           architecture: 'x64'
 
+      - name: Python mimarisi kontrol
+        run: |
+          python -c "import struct; print('PYTHON BIT:', struct.calcsize('P') * 8)"
+          python -c "import platform; print('MACHINE:', platform.machine())"
+
       - name: Bağımlılıkları yükle
         run: |
           python -m pip install --upgrade pip
@@ -41,6 +46,15 @@ jobs:
       - name: Exe yap
         run: |
           python -m PyInstaller --onefile --windowed --name "StockFlow_v15" masaustu_v15.py
+
+      - name: Exe mimarisi kontrol
+        run: |
+          $bytes = [System.IO.File]::ReadAllBytes("dist/StockFlow_v15.exe")
+          $machine = [System.BitConverter]::ToUInt16($bytes, 0x3C + 4)
+          if ($machine -eq 0x8664) { Write-Host "64-bit AMD64" }
+          elseif ($machine -eq 0x14c) { Write-Host "32-bit i386" }
+          else { Write-Host "Unknown: $machine" }
+        shell: pwsh
 
       - name: Zip yap
         run: |
