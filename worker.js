@@ -1,4 +1,4 @@
-// VAŞAK ERP v15.0 Maviş — Cloudflare Worker + D1
+// StockFlow v15.0 v15.0 — Cloudflare Worker + D1
 
 const JWT_SECRET = "vasak_gizli_anahtar_2025";
 const VASAK_SIFRE = "123456";
@@ -64,7 +64,7 @@ export default {
       }
     });
 
-    if (path === "/" || path === "/api/saglik") return json({ sistem: "VAŞAK ERP", versiyon: "v15.0 Maviş", durum: "çalışıyor 🐱" });
+    if (path === "/" || path === "/api/saglik") return json({ sistem: "StockFlow", versiyon: "v15.0 v15.0", durum: "çalışıyor 🐱" });
 
     // ── GİRİŞ ──
     if (path === "/api/giris" && method === "POST") {
