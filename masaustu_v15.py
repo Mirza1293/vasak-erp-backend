@@ -831,22 +831,43 @@ class StokSistemi(QMainWindow):
     def _guncelleme_tamamlandi(self, dosya_yolu):
         self.lbl_durum.setText("✅ Güncelleme hazır!")
         try:
-            import zipfile, subprocess
-            # Zip'i exe'nin yanına aç
-            hedef_klasor = calisma_dizini_bul()
+            import zipfile, subprocess, tempfile, shutil
+            # Zip'i temp klasörüne aç
+            temp_dir = tempfile.mkdtemp()
             with zipfile.ZipFile(dosya_yolu, 'r') as z:
-                z.extractall(hedef_klasor)
-            # Yeni exe'yi bul ve başlat
-            yeni_exe = os.path.join(hedef_klasor, "StockFlow_v15.exe")
-            if os.path.exists(yeni_exe):
-                QMessageBox.information(self, "Güncelleme Hazır",
-                    "Güncelleme tamamlandı!\nUygulama yeniden başlatılacak.")
-                subprocess.Popen([yeni_exe])
-                QApplication.quit()
-            else:
-                QMessageBox.warning(self, "Uyarı", "Exe bulunamadı, lütfen manuel güncelleyin.")
+                z.extractall(temp_dir)
+            # Exe'yi bul
+            yeni_exe_temp = os.path.join(temp_dir, "StockFlow_v15.exe")
+            if not os.path.exists(yeni_exe_temp):
+                # İçinde klasör olabilir
+                for root, dirs, files in os.walk(temp_dir):
+                    for f in files:
+                        if f.endswith(".exe"):
+                            yeni_exe_temp = os.path.join(root, f)
+                            break
+            if not os.path.exists(yeni_exe_temp):
+                QMessageBox.warning(self, "Uyarı", "Zip içinde exe bulunamadı.")
+                return
+            # Exe'yi çalışma dizinine kopyala
+            hedef_klasor = calisma_dizini_bul()
+            hedef_exe = os.path.join(hedef_klasor, "StockFlow_v15.exe")
+            # Mevcut exe'yi yenisiyle değiştir (bat script ile)
+            bat_icerik = (
+                f'@echo off\n'
+                f'timeout /t 2 /nobreak >nul\n'
+                f'copy /y "{yeni_exe_temp}" "{hedef_exe}"\n'
+                f'start "" "{hedef_exe}"\n'
+                f'del "%~f0"\n'
+            )
+            bat_yol = os.path.join(temp_dir, "guncelle.bat")
+            with open(bat_yol, 'w', encoding='cp1254') as f:
+                f.write(bat_icerik)
+            QMessageBox.information(self, "Güncelleme Hazır",
+                "Güncelleme tamamlandı!\nUygulama yeniden başlatılacak.")
+            subprocess.Popen([bat_yol], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            QApplication.quit()
         except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Güncelleme açılamadı: {e}")
+            QMessageBox.critical(self, "Hata", f"Güncelleme hatası: {e}")
 
     def tema_degistir(self, tema_adi):
         global AKTIF_TEMA
