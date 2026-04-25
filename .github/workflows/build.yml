@@ -15,16 +15,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Windows Defender devre dışı
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Add-MpPreference -ExclusionPath "D:\a"
+        shell: pwsh
+
       - name: Python 64-bit kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           architecture: 'x64'
-
-      - name: Python mimarisi kontrol
-        run: |
-          python -c "import struct; print('PYTHON BIT:', struct.calcsize('P') * 8)"
-          python -c "import platform; print('MACHINE:', platform.machine())"
 
       - name: Bağımlılıkları yükle
         run: |
@@ -50,10 +51,11 @@ jobs:
       - name: Exe mimarisi kontrol
         run: |
           $bytes = [System.IO.File]::ReadAllBytes("dist/StockFlow_v15.exe")
-          $machine = [System.BitConverter]::ToUInt16($bytes, 0x3C + 4)
-          if ($machine -eq 0x8664) { Write-Host "64-bit AMD64" }
+          $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [System.BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          if ($machine -eq 0x8664) { Write-Host "64-bit AMD64 OK" }
           elseif ($machine -eq 0x14c) { Write-Host "32-bit i386" }
-          else { Write-Host "Unknown: $machine" }
+          else { Write-Host "Unknown: $machine (PE offset: $peOffset)" }
         shell: pwsh
 
       - name: Zip yap
