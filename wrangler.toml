@@ -2,9 +2,7 @@ name = "vasak-erp-backend"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
-[vars]
-# Bu değerleri Cloudflare dashboard > Workers > Settings > Variables kısmından gir:
-# SUPABASE_URL  = "https://xxxxx.supabase.co"
-# SUPABASE_KEY  = "eyJ..."
-# JWT_SECRET    = "vasak_gizli_anahtar_2025"
-# VASAK_SIFRE   = "123456"
+[[d1_databases]]
+binding = "DB"
+database_name = "vasak-db"
+database_id = "b9c02cc1-700e-40ba-88c1-1c1312ebebc3"
