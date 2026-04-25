@@ -1,0 +1,57 @@
+name: Build and Release StockFlow
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'masaustu_v15.py'
+      - 'version.txt'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bağımlılıkları yükle
+        run: |
+          pip install pyinstaller
+          pip install PyQt6
+          pip install requests
+          pip install Pillow
+          pip install pyzbar
+          pip install openpyxl
+
+      - name: Versiyon oku
+        id: version
+        run: |
+          $ver = Get-Content version.txt -Raw
+          $ver = $ver.Trim()
+          echo "VER=$ver" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Exe yap
+        run: |
+          pyinstaller --onefile --windowed --name "StockFlow_v15" masaustu_v15.py
+
+      - name: Zip yap
+        run: |
+          Compress-Archive -Path dist/StockFlow_v15.exe -DestinationPath StockFlow_v15.zip
+        shell: pwsh
+
+      - name: Release oluştur
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VER }}
+          name: StockFlow ${{ steps.version.outputs.VER }}
+          files: StockFlow_v15.zip
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
