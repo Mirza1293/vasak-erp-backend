@@ -24,15 +24,17 @@ jobs:
       - name: Bağımlılıkları yükle
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller
+          pip install "pyinstaller==6.3.0"
           pip install PyQt6
           pip install requests
           pip install Pillow
-          pip install pyzbar
           pip install openpyxl
+          pip install pyzbar
 
-      - name: Python mimarisi kontrol
-        run: python -c "import struct; print('Bit:', struct.calcsize('P') * 8)"
+      - name: Python ve PyInstaller mimarisi kontrol
+        run: |
+          python -c "import struct; print('Python bit:', struct.calcsize('P') * 8)"
+          python -c "import platform; print('Machine:', platform.machine())"
 
       - name: Versiyon oku
         id: version
@@ -42,9 +44,9 @@ jobs:
           echo "VER=$ver" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
-      - name: Exe yap
+      - name: Exe yap (64-bit)
         run: |
-          pyinstaller --onefile --windowed --name "StockFlow_v15" masaustu_v15.py
+          python -m PyInstaller --onefile --windowed --name "StockFlow_v15" --target-architecture x86_64 masaustu_v15.py
 
       - name: Zip yap
         run: |
