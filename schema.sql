@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS urunler (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  barkod TEXT UNIQUE NOT NULL,
+  kategori TEXT NOT NULL DEFAULT 'Et',
+  gelis_tarihi TEXT DEFAULT '-',
+  kullanim_tarihi TEXT DEFAULT '-',
+  tekrar_kullanim_tarihi TEXT DEFAULT '-',
+  kuvet_kullanim_tarihi TEXT DEFAULT '-',
+  takoz_kullanim_tarihi TEXT DEFAULT '-',
+  zayi_tarihi TEXT DEFAULT '-',
+  transfer_tarihi TEXT DEFAULT '-',
+  ilk_miktar REAL DEFAULT 0,
+  kalan_miktar REAL DEFAULT 0,
+  tekrar_miktar REAL DEFAULT 0,
+  kuvet_miktar REAL DEFAULT 0,
+  takoz_miktar REAL DEFAULT 0,
+  zayi_miktar REAL DEFAULT 0,
+  transfer_miktar REAL DEFAULT 0,
+  transfer_yon TEXT DEFAULT '-',
+  transfer_isletme TEXT DEFAULT '-'
+);
