@@ -1,7 +1,7 @@
 {
-  "name": "VAŞAK ERP",
-  "short_name": "VAŞAK ERP",
-  "description": "v15.0 Maviş · Et & Tavuk Stok Takip Sistemi",
+  "name": "StockFlow",
+  "short_name": "StockFlow",
+  "description": "v15.0 · Et & Tavuk Stok Yönetimi",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#1e1e2e",
