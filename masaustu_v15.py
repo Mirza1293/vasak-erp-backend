@@ -810,10 +810,13 @@ class StokSistemi(QMainWindow):
 
     def _guncelleme_bildir(self, yeni_versiyon):
         cevap = QMessageBox.question(self, "Güncelleme Mevcut",
-            f"Yeni sürüm: {yeni_versiyon}\nMevcut sürüm: {UYGULAMA_VERSIYON}\n\nOtomatik güncellensin mi?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if cevap == QMessageBox.StandardButton.Yes:
-            self._guncellemeyi_indir(yeni_versiyon)
+            f"Yeni sürüm: {yeni_versiyon}\nMevcut sürüm: {UYGULAMA_VERSIYON}\n\n"
+            "İndirme sayfası tarayıcıda açılacak.\n"
+            "İndirilen exe'yi çalıştırarak güncelleme yapabilirsiniz.",
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        if cevap == QMessageBox.StandardButton.Ok:
+            import webbrowser
+            webbrowser.open(GITHUB_RELEASE_URL)
 
     def _guncellemeyi_indir(self, yeni_versiyon):
         import tempfile
