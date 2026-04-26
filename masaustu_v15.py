@@ -819,17 +819,8 @@ class StokSistemi(QMainWindow):
             webbrowser.open(GITHUB_RELEASE_URL)
 
     def _guncellemeyi_indir(self, yeni_versiyon):
-        import tempfile
-        hedef = os.path.join(tempfile.gettempdir(), f"StockFlow_{yeni_versiyon}.exe")
-        self.lbl_durum.setText("⬇️ Güncelleme indiriliyor...")
-        self.indirici = GuincellemeIndirici(GITHUB_RELEASE_URL, hedef)
-        self.indirici.ilerleme.connect(lambda p: self.lbl_durum.setText(f"⬇️ İndiriliyor... %{p}"))
-        self.indirici.tamamlandi.connect(self._guncelleme_tamamlandi)
-        self.indirici.hata.connect(lambda e: (
-            self.lbl_durum.setText("❌ İndirme hatası"),
-            QMessageBox.critical(self, "Hata", f"İndirme başarısız: {e}")
-        ))
-        self.indirici.start()
+        import webbrowser
+        webbrowser.open(GITHUB_RELEASE_URL)
 
     def _guncelleme_tamamlandi(self, dosya_yolu):
         self.lbl_durum.setText("✅ Güncelleme hazır!")
