@@ -16,14 +16,13 @@ except ImportError:
     def pyzbar_decode(img): return []
 import openpyxl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QStyleOptionHeader,
                              QSplashScreen, QStyledItemDelegate,
                              QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
                              QLineEdit, QHeaderView, QAbstractItemView,
                              QDialog, QFormLayout, QDoubleSpinBox, QMessageBox,
                              QFileDialog, QComboBox, QTabWidget, QLabel, QDateEdit,
                              QListWidget, QListWidgetItem, QSizeGrip, QCheckBox)
-from PyQt6.QtCore import Qt, QDate, QTimer, QSettings, QThread, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, QDate, QTimer, QSettings, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QKeySequence, QIcon, QShortcut
 
 # ─────────────────────────────────────────
@@ -74,7 +73,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.0"
+UYGULAMA_VERSIYON = "v2.7"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -346,46 +345,6 @@ class SiralanabilirItem(QTableWidgetItem):
         if other.gercek_deger == "-": return True
         try: return self.gercek_deger < other.gercek_deger
         except TypeError: return str(self.gercek_deger) < str(other.gercek_deger)
-
-
-class WordWrapHeaderView(QHeaderView):
-    """Başlık metni dar sütunda aşağı kayarak sarılır"""
-    def __init__(self, orientation, parent=None):
-        super().__init__(orientation, parent)
-        self.setSectionsMovable(False)
-        self.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
-
-    def sectionSizeFromContents(self, logical_index):
-        opt = self.initStyleOption_section(logical_index) if hasattr(self, 'initStyleOption_section') else None
-        text = self.model().headerData(logical_index, self.orientation()) if self.model() else ""
-        if not text:
-            return super().sectionSizeFromContents(logical_index)
-        fm = self.fontMetrics()
-        section_width = self.sectionSize(logical_index)
-        rect = fm.boundingRect(0, 0, max(section_width - 10, 40), 1000,
-                               int(Qt.TextFlag.TextWordWrap) | int(Qt.AlignmentFlag.AlignCenter),
-                               str(text))
-        return rect.size() + QSize(10, 10)
-
-    def paintSection(self, painter, rect, logical_index):
-        painter.save()
-        self.initStyleOption_painter(painter, rect, logical_index)
-        text = self.model().headerData(logical_index, self.orientation()) if self.model() else ""
-        if text:
-            painter.setPen(self.palette().color(self.foregroundRole()) if hasattr(self, 'foregroundRole') else painter.pen().color())
-            painter.drawText(rect.adjusted(4, 4, -4, -4),
-                             int(Qt.TextFlag.TextWordWrap) | int(Qt.AlignmentFlag.AlignCenter),
-                             str(text))
-        painter.restore()
-
-    def initStyleOption_painter(self, painter, rect, logical_index):
-        """Arka planı çiz"""
-        opt = QStyleOptionHeader()
-        self.initStyleOption(opt)
-        opt.rect = rect
-        opt.section = logical_index
-        opt.text = ""
-        self.style().drawControl(self.style().ControlElement.CE_Header, opt, painter, self)
 
 
 class ComboBoxDelegate(QStyledItemDelegate):
@@ -1361,21 +1320,18 @@ class StokSistemi(QMainWindow):
     def tablo_olustur(self):
         table = GelistirilmisTablo(self)
         table.setColumnCount(13)
-        self.basliklar = ["Barkod", "Geliş T.", "Kullanım T.", "Küvet T. (Tekrar)", "Küvet (DÜŞ)", "Takoz T. (Tekrar)", "Takoz (DÜŞ)", "İlk Miktar", "Kalan Miktar", "Tüketim (%)", "Zayi (kg)", "Zayi T.", "ID"]
+        self.basliklar = ["Barkod", "Geliş\nT.", "Kullanım\nT.", "Küvet T.\n(Tekrar)", "Küvet\n(DÜŞ)", "Takoz T.\n(Tekrar)", "Takoz\n(DÜŞ)", "İlk\nMiktar", "Kalan\nMiktar", "Tüketim\n(%)", "Zayi\n(kg)", "Zayi\nT.", "ID"]
         table.setHorizontalHeaderLabels(self.basliklar)
         table.setFont(QFont("Arial", 12))
         table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed)
-        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
-        table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        wrap_header = WordWrapHeaderView(Qt.Orientation.Horizontal, table)
-        wrap_header.setStretchLastSection(False)
-        wrap_header.setMinimumSectionSize(40)
-        wrap_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        wrap_header.setHighlightSections(True)
-        wrap_header.setSortIndicatorShown(True)
-        wrap_header.sectionClicked.connect(table.sortByColumn)
-        table.setHorizontalHeader(wrap_header)
-        header_h = wrap_header
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        header_h = table.horizontalHeader()
+        header_h.setStretchLastSection(False)
+        header_h.setMinimumSectionSize(40)
+        header_h.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header_h.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        header_h.setFixedHeight(48)  # İki satır sığacak yükseklik
         table.setShowGrid(True)
         table.setStyleSheet("""
             QTableWidget { gridline-color: #45475A; }
@@ -1398,6 +1354,7 @@ class StokSistemi(QMainWindow):
         header = table.horizontalHeader()
         header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         header.customContextMenuRequested.connect(lambda pos, t=table: self.baslik_menusu_ac(pos, t))
+        # Sıralama sonrası renklendirme verileri_yukle sonunda yapılıyor
         # Tarih sütunları için DateDelegate
         _date_delegate = DateDelegate(table)
         for col in [1, 2, 3, 5, 11, 13]:
@@ -1500,9 +1457,13 @@ class StokSistemi(QMainWindow):
 
     def verileri_yukle(self):
         self.lbl_durum.setText("☁️ Yükleniyor...")
+        # Önceki thread hâlâ çalışıyorsa bekle
+        if hasattr(self, 'yukleyici') and self.yukleyici and self.yukleyici.isRunning():
+            return
         self.yukleyici = VeriYukleyici(self.api)
         self.yukleyici.veri_hazir.connect(self._verileri_isle)
         self.yukleyici.hata_olustu.connect(self._baglanti_hatasi)
+        self.yukleyici.finished.connect(lambda: None)  # referans tut
         self.yukleyici.start()
 
     def _verileri_isle(self, veriler_raw):
@@ -1667,7 +1628,12 @@ class StokSistemi(QMainWindow):
             if kalan_mik > 0 and kalan_mik <= (ilk_mik * 0.20): kalan_item.setForeground(QColor("#F38BA8"))
             elif kalan_mik == 0: kalan_item.setForeground(QColor("#A6ADC8"))
             hedef_tablo.setItem(row_idx, 8, kalan_item)
-            hedef_tablo.setItem(row_idx, 9, SiralanabilirItem(f"% {tuketim_yuzdesi:.0f}", tuketim_yuzdesi))
+            tuk_item = SiralanabilirItem(f"% {tuketim_yuzdesi:.0f}", tuketim_yuzdesi)
+            if tuketim_yuzdesi >= 90: tuk_item.setForeground(QColor("#F38BA8"))   # kırmızı
+            elif tuketim_yuzdesi >= 70: tuk_item.setForeground(QColor("#FAB387"))  # turuncu
+            elif tuketim_yuzdesi >= 40: tuk_item.setForeground(QColor("#F9E2AF"))  # sarı
+            else: tuk_item.setForeground(QColor("#A6E3A1"))                        # yeşil
+            hedef_tablo.setItem(row_idx, 9, tuk_item)
             zayi_item = SiralanabilirItem(f"{zayi_mik:.2f} kg".replace('.', ','), zayi_mik)
             if zayi_mik > 0: zayi_item.setForeground(QColor("#F9E2AF"))
             hedef_tablo.setItem(row_idx, 10, zayi_item)
@@ -1726,6 +1692,8 @@ class StokSistemi(QMainWindow):
         self.table_tavuk.blockSignals(False)
         self._sutun_genisliklerini_ayarla()
         self.basliklari_gorselle()
+        self.satirlari_renklendir(self.table_et)
+        self.satirlari_renklendir(self.table_tavuk)
         self.tablolari_filtrele()
         self.analiz_tablolarini_doldur()
         self._stok_ozet_doldur(veriler_raw)
@@ -2028,6 +1996,35 @@ class StokSistemi(QMainWindow):
                     QMessageBox.information(self, "Transfer Kaydı", msg)
                     return
 
+    def satirlari_renklendir(self, tablo):
+        """Bej / yeşil zebra - yazı rengi arka plana göre"""
+        tablo.blockSignals(True)
+        # Arka plan renkleri
+        bg_bej   = QColor("#3A3520")   # koyu amber/bej
+        bg_yesil = QColor("#142814")   # koyu orman yeşili
+        # Yazı renkleri - arka planla belirgin zıt
+        fg_bej   = QColor("#7FFFD4")   # aquamarine — bej üstünde belirgin
+        fg_yesil = QColor("#FFD700")   # altın sarısı — koyu yeşil üstünde belirgin
+        col_count = tablo.columnCount()
+        for row in range(tablo.rowCount()):
+            bg = bg_bej if row % 2 == 0 else bg_yesil
+            fg = fg_bej if row % 2 == 0 else fg_yesil
+            for col in range(col_count):
+                item = tablo.item(row, col)
+                if item:
+                    item.setBackground(bg)
+                    # Özel renkli sütunları koru (kalan kritik, zayi, tüketim %)
+                    mevcut_fg = item.foreground().color()
+                    ozel_renkler = [
+                        QColor("#F38BA8"), QColor("#A6E3A1"),  # kritik kırmızı, yeşil
+                        QColor("#F9E2AF"), QColor("#FAB387"),  # sarı, turuncu
+                        QColor("#CBA6F7"), QColor("#89B4FA"),  # mor, mavi
+                        QColor("#A6ADC8"),                     # gri barkod
+                    ]
+                    if not any(mevcut_fg.name() == r.name() for r in ozel_renkler):
+                        item.setForeground(fg)
+        tablo.blockSignals(False)
+
     def analiz_tablolarini_doldur(self):
         self.table_gunluk.setRowCount(0)
         self.table_haftalik.setRowCount(0)
@@ -2152,7 +2149,10 @@ class StokSistemi(QMainWindow):
 
     def hizli_hucre_guncelle(self, satir, sutun, yeni_deger):
         tablo = self.aktif_tabloyu_al()
-        urun_id = int(tablo.item(satir, 12).text())
+        if not tablo: return
+        id_item = tablo.item(satir, 12)
+        if not id_item: return
+        urun_id = int(id_item.text())
 
         alan_adi = {0: "barkod", 1: "gelis_tarihi", 2: "kullanim_tarihi",
                     3: "kuvet_kullanim_tarihi", 4: "kuvet_miktar",
