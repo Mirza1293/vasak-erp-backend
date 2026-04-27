@@ -708,7 +708,7 @@ class SutunFiltreDialog(QDialog):
 
 
 class UrunEkleDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, varsayilan_kategori=None):
         super().__init__(parent)
         self.setWindowTitle("Yeni Kayıt")
         self.resize(450, 250)
@@ -725,6 +725,9 @@ class UrunEkleDialog(QDialog):
         barkod_layout.addWidget(self.barkod_oku_btn)
         self.kategori_input = QComboBox()
         self.kategori_input.addItems(["Et", "Tavuk"])
+        if varsayilan_kategori:
+            self.kategori_input.setCurrentText(varsayilan_kategori)
+            self.kategori_input.setEnabled(False)  # Sekmeden açılınca kategori sabitle
         self.kategori_input.setStyleSheet("background-color: #1E1E2E; color: #CDD6F4; border: 2px solid #313244; border-radius: 12px; padding: 5px;")
         ortak_stil = "background-color: #1E1E2E; color: #CDD6F4; border: 2px solid #313244; border-radius: 12px; padding: 5px;"
         self.gelis_tarihi = QDateEdit()
@@ -2084,7 +2087,15 @@ class StokSistemi(QMainWindow):
         self.verileri_yukle()
 
     def yeni_urun_penceresi_ac(self):
-        dialog = UrunEkleDialog(self)
+        # Aktif sekmeye göre kategori belirle
+        idx = self.tabs.currentIndex()
+        if idx == 1:
+            kat = "Et"
+        elif idx == 2:
+            kat = "Tavuk"
+        else:
+            kat = None
+        dialog = UrunEkleDialog(self, varsayilan_kategori=kat)
         dialog.setStyleSheet(self.styleSheet())
         if dialog.exec() == QDialog.DialogCode.Accepted:
             barkod, kategori, gelis, kullanim, tekrar, ilk_mik, kalan_mik = dialog.verileri_al()
@@ -2298,6 +2309,30 @@ class GirisEkrani(QDialog):
             ayar.sync()
         except: pass
 
+    def otomatik_giris(self):
+        """Kayıtlı şifre varsa direkt giriş yap"""
+        try:
+            ayar = QSettings(self.AYAR_DOSYASI, QSettings.Format.IniFormat)
+            if ayar.value("hatirla", False, type=bool):
+                import base64
+                sifre = base64.b64decode(ayar.value("sifre", "")).decode()
+                if sifre:
+                    self.giris_btn.setText("Bağlanıyor...")
+                    self.giris_btn.setEnabled(False)
+                    self.durum_lbl.setText("Otomatik giriş yapılıyor...")
+                    QApplication.processEvents()
+                    basarili = self.api.giris_yap(sifre)
+                    if basarili:
+                        self.accept()
+                        return True
+                    else:
+                        self.giris_btn.setText("Giriş Yap")
+                        self.giris_btn.setEnabled(True)
+                        self.durum_lbl.setText("")
+        except Exception:
+            pass
+        return False
+
     def giris_kontrol(self):
         self.giris_btn.setText("Bağlanıyor...")
         self.giris_btn.setEnabled(False)
@@ -2401,7 +2436,11 @@ if __name__ == "__main__":
     splash.close()
 
     giris = GirisEkrani()
-    if giris.exec() == QDialog.DialogCode.Accepted:
+    # Kayıtlı şifre varsa otomatik giriş
+    if not giris.otomatik_giris():
+        if giris.exec() != QDialog.DialogCode.Accepted:
+            sys.exit()
+    if True:
         window = StokSistemi(giris.api)
         window.show()
         sys.exit(app.exec())
