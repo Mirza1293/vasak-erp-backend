@@ -29,6 +29,7 @@ from PyQt6.QtGui import QColor, QFont, QKeySequence, QIcon, QShortcut
 #  SUNUCU AYARI — Render URL'nizi buraya girin
 # ─────────────────────────────────────────
 API_URL = "https://vasak-erp-backend.speedyhck.workers.dev"
+YEDEK_DOSYA = "stockflow_yedek.json"
 
 # ─────────────────────────────────────────
 #  TEMALAR
@@ -72,7 +73,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v1.6"
+UYGULAMA_VERSIYON = "v2.5"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -803,6 +804,35 @@ class StokSistemi(QMainWindow):
         # Ctrl+scroll global olarak yakala
         QApplication.instance().installEventFilter(self)
 
+    def _yerel_yedek_kaydet(self, veriler):
+        """Verileri yerel JSON dosyasına yedekle"""
+        try:
+            import json
+            yedek_yolu = os.path.join(self.veri_klasoru, YEDEK_DOSYA)
+            yedek = {
+                "tarih": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
+                "versiyon": UYGULAMA_VERSIYON,
+                "kayit_sayisi": len(veriler),
+                "veriler": veriler
+            }
+            with open(yedek_yolu, 'w', encoding='utf-8') as f:
+                json.dump(yedek, f, ensure_ascii=False, indent=2, default=str)
+        except Exception as e:
+            print(f"Yedekleme hatası: {e}")
+
+    def _yerel_yedekten_yukle(self):
+        """Cloudflare erişilemiyorsa yerel yedekten yükle"""
+        try:
+            import json
+            yedek_yolu = os.path.join(self.veri_klasoru, YEDEK_DOSYA)
+            if not os.path.exists(yedek_yolu):
+                return None
+            with open(yedek_yolu, 'r', encoding='utf-8') as f:
+                yedek = json.load(f)
+            return yedek
+        except Exception:
+            return None
+
     def guncelleme_kontrol_et(self):
         self.gkontrolcu = GuncellemKontrolcu()
         self.gkontrolcu.guncelleme_var.connect(self._guncelleme_bildir)
@@ -819,8 +849,32 @@ class StokSistemi(QMainWindow):
             webbrowser.open(GITHUB_RELEASE_URL)
 
     def _guncellemeyi_indir(self, yeni_versiyon):
-        import webbrowser
-        webbrowser.open(GITHUB_RELEASE_URL)
+        import webbrowser, tempfile, subprocess
+        # Önce direkt indirmeyi dene
+        try:
+            self.lbl_durum.setText("⬇️ İndiriliyor...")
+            QApplication.processEvents()
+            # GitHub redirect'i takip ederek indir
+            oturum = requests.Session()
+            oturum.headers.update({"User-Agent": "StockFlow-Updater/1.0"})
+            r = oturum.get(GITHUB_RELEASE_URL, stream=True, timeout=60, allow_redirects=True)
+            if r.status_code == 200:
+                # Masaüstüne indir
+                masaustu = os.path.join(os.path.expanduser("~"), "Desktop")
+                hedef = os.path.join(masaustu, "StockFlow_v15_yeni.exe")
+                with open(hedef, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                self.lbl_durum.setText("✅ İndirildi!")
+                QMessageBox.information(self, "Güncelleme Hazır",
+                    f"Yeni exe masaüstüne indirildi:\nStockFlow_v15_yeni.exe\n\n"
+                    "Uygulamayı kapatıp yeni exe'yi çalıştırın.")
+            else:
+                raise Exception(f"HTTP {r.status_code}")
+        except Exception as e:
+            self.lbl_durum.setText("")
+            webbrowser.open("https://github.com/Mirza1293/vasak-erp-backend/releases/latest")
 
     def _guncelleme_tamamlandi(self, dosya_yolu):
         self.lbl_durum.setText("✅ Güncelleme hazır!")
@@ -1312,14 +1366,28 @@ class StokSistemi(QMainWindow):
         return "-"
 
     # ── VERİ YÜKLEME (API'den) ──
+    def _baglanti_hatasi(self, hata):
+        self.lbl_durum.setText(f"❌ {hata}")
+        # Yerel yedekten yükle
+        yedek = self._yerel_yedekten_yukle()
+        if yedek:
+            cevap = QMessageBox.question(self, "Bağlantı Hatası",
+                f"Sunucuya bağlanılamadı.\n"
+                f"Son yedek: {yedek.get('tarih', '?')} — {yedek.get('kayit_sayisi', 0)} kayıt\n\n"
+                "Yerel yedekten yüklensin mi?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if cevap == QMessageBox.StandardButton.Yes:
+                self._verileri_isle(yedek["veriler"])
+                self.lbl_durum.setText("📂 Yerel yedekten yüklendi")
+                QTimer.singleShot(5000, lambda: self.lbl_durum.setText(""))
+        else:
+            QTimer.singleShot(5000, lambda: self.lbl_durum.setText(""))
+
     def verileri_yukle(self):
         self.lbl_durum.setText("☁️ Yükleniyor...")
         self.yukleyici = VeriYukleyici(self.api)
         self.yukleyici.veri_hazir.connect(self._verileri_isle)
-        self.yukleyici.hata_olustu.connect(lambda hata: (
-            self.lbl_durum.setText(f"❌ {hata}"),
-            QTimer.singleShot(5000, lambda: self.lbl_durum.setText(""))
-        ))
+        self.yukleyici.hata_olustu.connect(self._baglanti_hatasi)
         self.yukleyici.start()
 
     def _verileri_isle(self, veriler_raw):
@@ -1549,6 +1617,8 @@ class StokSistemi(QMainWindow):
         self.transfer_tablosunu_doldur()
         self.lbl_durum.setText("✅ Senkronize edildi")
         QTimer.singleShot(3000, lambda: self.lbl_durum.setText(""))
+        # Yerel yedek kaydet
+        self._yerel_yedek_kaydet(veriler_raw)
 
     def transfer_tablosunu_doldur(self):
         """Transfer sekmesi tablosunu ve özet kartlarını güncelle"""
