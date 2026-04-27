@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'masaustu_v15.py'
+      - 'stockflow.py'
       - 'version.txt'
 
 jobs:
@@ -46,14 +46,14 @@ jobs:
 
       - name: Exe yap
         run: |
-          python -m PyInstaller --onefile --windowed --name "StockFlow_v15" masaustu_v15.py
+          python -m PyInstaller --onefile --windowed --name "StockFlow" stockflow.py
 
       - name: Release oluştur
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VER }}
           name: StockFlow ${{ steps.version.outputs.VER }}
-          files: dist/StockFlow_v15.exe
+          files: dist/StockFlow.exe
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
