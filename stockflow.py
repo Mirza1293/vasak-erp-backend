@@ -16,13 +16,14 @@ except ImportError:
     def pyzbar_decode(img): return []
 import openpyxl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QStyleOptionHeader,
                              QSplashScreen, QStyledItemDelegate,
                              QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
                              QLineEdit, QHeaderView, QAbstractItemView,
                              QDialog, QFormLayout, QDoubleSpinBox, QMessageBox,
                              QFileDialog, QComboBox, QTabWidget, QLabel, QDateEdit,
                              QListWidget, QListWidgetItem, QSizeGrip, QCheckBox)
-from PyQt6.QtCore import Qt, QDate, QTimer, QSettings, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QDate, QTimer, QSettings, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import QColor, QFont, QKeySequence, QIcon, QShortcut
 
 # ─────────────────────────────────────────
@@ -73,7 +74,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v2.9"
+UYGULAMA_VERSIYON = "v2.7"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -345,6 +346,46 @@ class SiralanabilirItem(QTableWidgetItem):
         if other.gercek_deger == "-": return True
         try: return self.gercek_deger < other.gercek_deger
         except TypeError: return str(self.gercek_deger) < str(other.gercek_deger)
+
+
+class WordWrapHeaderView(QHeaderView):
+    """Başlık metni dar sütunda aşağı kayarak sarılır"""
+    def __init__(self, orientation, parent=None):
+        super().__init__(orientation, parent)
+        self.setSectionsMovable(False)
+        self.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
+
+    def sectionSizeFromContents(self, logical_index):
+        opt = self.initStyleOption_section(logical_index) if hasattr(self, 'initStyleOption_section') else None
+        text = self.model().headerData(logical_index, self.orientation()) if self.model() else ""
+        if not text:
+            return super().sectionSizeFromContents(logical_index)
+        fm = self.fontMetrics()
+        section_width = self.sectionSize(logical_index)
+        rect = fm.boundingRect(0, 0, max(section_width - 10, 40), 1000,
+                               int(Qt.TextFlag.TextWordWrap) | int(Qt.AlignmentFlag.AlignCenter),
+                               str(text))
+        return rect.size() + QSize(10, 10)
+
+    def paintSection(self, painter, rect, logical_index):
+        painter.save()
+        self.initStyleOption_painter(painter, rect, logical_index)
+        text = self.model().headerData(logical_index, self.orientation()) if self.model() else ""
+        if text:
+            painter.setPen(self.palette().color(self.foregroundRole()) if hasattr(self, 'foregroundRole') else painter.pen().color())
+            painter.drawText(rect.adjusted(4, 4, -4, -4),
+                             int(Qt.TextFlag.TextWordWrap) | int(Qt.AlignmentFlag.AlignCenter),
+                             str(text))
+        painter.restore()
+
+    def initStyleOption_painter(self, painter, rect, logical_index):
+        """Arka planı çiz"""
+        opt = QStyleOptionHeader()
+        self.initStyleOption(opt)
+        opt.rect = rect
+        opt.section = logical_index
+        opt.text = ""
+        self.style().drawControl(self.style().ControlElement.CE_Header, opt, painter, self)
 
 
 class ComboBoxDelegate(QStyledItemDelegate):
@@ -1326,10 +1367,15 @@ class StokSistemi(QMainWindow):
         table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        header_h = table.horizontalHeader()
-        header_h.setStretchLastSection(False)
-        header_h.setMinimumSectionSize(40)
-        header_h.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        wrap_header = WordWrapHeaderView(Qt.Orientation.Horizontal, table)
+        wrap_header.setStretchLastSection(False)
+        wrap_header.setMinimumSectionSize(40)
+        wrap_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        wrap_header.setHighlightSections(True)
+        wrap_header.setSortIndicatorShown(True)
+        wrap_header.sectionClicked.connect(table.sortByColumn)
+        table.setHorizontalHeader(wrap_header)
+        header_h = wrap_header
         table.setShowGrid(True)
         table.setStyleSheet("""
             QTableWidget { gridline-color: #45475A; }
