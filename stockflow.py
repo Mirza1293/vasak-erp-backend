@@ -1080,6 +1080,8 @@ class StokSistemi(QMainWindow):
         self.tabs.addTab(self.tab_tavuk, "🍗 Tavuk Kayıtları")
         self.tabs.addTab(self.tab_analiz, "📊 Analiz & Raporlar")
         self.tabs.addTab(self.tab_transfer, "🔄 Transfer")
+        self.tab_kisayollar = QWidget()
+        self.tabs.addTab(self.tab_kisayollar, "⌨️ Kısayollar")
         layout.addWidget(self.tabs)
 
         dash_layout = QHBoxLayout(self.tab_dashboard)
@@ -1226,6 +1228,50 @@ class StokSistemi(QMainWindow):
 
         self._transfer_filtre = "hepsi"
 
+        # ── KISAYOLLAR SEKMESİ ──
+        kisayol_layout = QVBoxLayout(self.tab_kisayollar)
+        kisayol_layout.setContentsMargins(10, 10, 10, 10)
+
+        lbl_baslik = QLabel("⌨️ Klavye Kısayolları")
+        lbl_baslik.setStyleSheet("font-size: 18px; font-weight: bold; color: #FAB387; margin-bottom: 10px;")
+        kisayol_layout.addWidget(lbl_baslik)
+
+        self.table_kisayollar = self._analiz_tablosu(["Kısayol", "İşlev", "Açıklama"])
+        kisayol_layout.addWidget(self.table_kisayollar)
+
+        kisayol_data = [
+            ("Ctrl + A", "Ana Sayfa", "Ana sayfa sekmesine geç"),
+            ("Ctrl + E", "Et Kayıtları", "Et kayıtları sekmesine geç"),
+            ("Ctrl + T", "Tavuk Kayıtları", "Tavuk kayıtları sekmesine geç"),
+            ("Ctrl + Z", "Analiz", "Analiz & Raporlar sekmesine geç"),
+            ("Ctrl + R", "Transfer", "Transfer sekmesine geç"),
+            ("Ctrl + K", "Kısayollar", "Bu ekrana gel"),
+            ("Ctrl + N", "Yeni Kayıt", "Aktif sekmeye göre yeni kayıt ekle"),
+            ("Ctrl + Alt + E", "Et Ekle", "Et sekmesine geç ve yeni et kaydı ekle"),
+            ("Ctrl + Alt + T", "Tavuk Ekle", "Tavuk sekmesine geç ve yeni tavuk kaydı ekle"),
+            ("Ctrl + D", "Sil", "Seçili kaydı sil"),
+            ("F5", "Yenile", "Verileri sunucudan yenile"),
+            ("Ctrl + B", "Excel'den Al", "Excel dosyasından veri içe aktar"),
+            ("Ctrl + X", "Excel'e Aktar", "Tüm verileri Excel'e aktar"),
+            ("Ctrl + Scroll ↑↓", "Punto Boyutu", "Tablo yazı boyutunu büyüt/küçült"),
+            ("Çift Tıkla", "Düzenle", "Hücreyi düzenle (tarih/kg/yön için özel giriş)"),
+            ("Sağ Tıkla", "Menü", "Düzenle / Kopyala / Transfer / Sil menüsü"),
+        ]
+
+        for kisayol, isim, aciklama in kisayol_data:
+            r = self.table_kisayollar.rowCount()
+            self.table_kisayollar.insertRow(r)
+            k_item = QTableWidgetItem(kisayol)
+            k_item.setForeground(QColor("#FAB387"))
+            k_item.setFont(QFont("Courier New", 12, QFont.Weight.Bold))
+            self.table_kisayollar.setItem(r, 0, k_item)
+            self.table_kisayollar.setItem(r, 1, QTableWidgetItem(isim))
+            self.table_kisayollar.setItem(r, 2, QTableWidgetItem(aciklama))
+            for col in range(3):
+                item = self.table_kisayollar.item(r, col)
+                if item:
+                    item.setBackground(QColor("#24273A") if r % 2 == 0 else QColor("#1E1E2E"))
+
         alt_bar = QHBoxLayout()
         self.lbl_secim_bilgi = QLabel("📊 Seçili Hücre: 0 | Toplam Değer: 0,00")
         self.lbl_secim_bilgi.setObjectName("lbl_secim")
@@ -1242,6 +1288,26 @@ class StokSistemi(QMainWindow):
         self.tabs.currentChanged.connect(lambda: self.lbl_secim_bilgi.setText("📊 Seçili Hücre: 0 | Toplam Değer: 0,00"))
         self.shortcut_kaydet = QShortcut(QKeySequence("Ctrl+S"), self)
         self.shortcut_kaydet.activated.connect(lambda: self.lbl_durum.setText("☁️ Bulut ile senkronize!") or QTimer.singleShot(3000, lambda: self.lbl_durum.setText("")))
+
+        # ── KISAYOL TUŞLARI ──
+        kisayollar = [
+            ("Ctrl+A", lambda: self.tabs.setCurrentIndex(0)),           # Ana Sayfa
+            ("Ctrl+E", lambda: self.tabs.setCurrentIndex(1)),           # Et Kayıtları
+            ("Ctrl+T", lambda: self.tabs.setCurrentIndex(2)),           # Tavuk Kayıtları
+            ("Ctrl+Z", lambda: self.tabs.setCurrentIndex(3)),           # Analiz
+            ("Ctrl+R", lambda: self.tabs.setCurrentIndex(4)),           # Transfer
+            ("Ctrl+K", lambda: self.tabs.setCurrentIndex(5)),           # Kısayollar
+            ("Ctrl+N", self.yeni_urun_penceresi_ac),                    # Yeni kayıt
+            ("Ctrl+Alt+E", lambda: (self.tabs.setCurrentIndex(1), self.yeni_urun_penceresi_ac())),  # Et ekle
+            ("Ctrl+Alt+T", lambda: (self.tabs.setCurrentIndex(2), self.yeni_urun_penceresi_ac())),  # Tavuk ekle
+            ("Ctrl+D", self.urun_sil),                                  # Sil
+            ("F5", self.verileri_yukle),                                # Yenile
+            ("Ctrl+B", self.excelden_iceri_aktar),                      # Excel'den al
+            ("Ctrl+X", self.excel_disa_aktar),                         # Excel'e aktar
+        ]
+        for kisayol, fonksiyon in kisayollar:
+            sc = QShortcut(QKeySequence(kisayol), self)
+            sc.activated.connect(fonksiyon)
 
     def _analiz_tablosu(self, basliklar):
         t = GelistirilmisTablo(self)
