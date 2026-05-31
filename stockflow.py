@@ -73,7 +73,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.01"
+UYGULAMA_VERSIYON = "v3.02"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -374,7 +374,8 @@ class SpinBoxDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         w = QDoubleSpinBox(parent)
         w.setRange(0, 99999)
-        w.setDecimals(2)
+        w.setDecimals(3)
+        w.setSingleStep(0.001)
         w.setSuffix(" kg")
         w.setMinimumWidth(120)
         w.setStyleSheet("background-color: #1E1E2E; color: #CDD6F4; border: 2px solid #FAB387; border-radius: 6px; padding: 4px 8px; font-size: 13px;")
@@ -388,7 +389,7 @@ class SpinBoxDelegate(QStyledItemDelegate):
             editor.setValue(0)
 
     def setModelData(self, editor, model, index):
-        model.setData(index, f"{editor.value():.2f} kg".replace(".", ","))
+        model.setData(index, f"{editor.value():.3f} kg".replace(".", ","))
 
 
 class DateDelegate(QStyledItemDelegate):
@@ -736,7 +737,7 @@ class UrunEkleDialog(QDialog):
         self.gelis_tarihi.setStyleSheet(ortak_stil)
         self.ilk_miktar_input = QDoubleSpinBox()
         self.ilk_miktar_input.setRange(0, 100000.00)
-        self.ilk_miktar_input.setDecimals(2)
+        self.ilk_miktar_input.setDecimals(3)
         self.ilk_miktar_input.setSuffix(" kg")
         self.ilk_miktar_input.setStyleSheet(ortak_stil)
         form_layout.addRow("Barkod Numarası:", barkod_layout)
@@ -1380,7 +1381,7 @@ class StokSistemi(QMainWindow):
             except ValueError:
                 pass
         adet = len(secili_hucreler)
-        self.lbl_secim_bilgi.setText(f"📊 Seçili Hücre: {adet} | Toplam Değer: {toplam:.2f}".replace('.', ',') if sayisal_adet > 0 else f"📊 Seçili Hücre: {adet} | Toplam Değer: 0,00")
+        self.lbl_secim_bilgi.setText(f"📊 Seçili Hücre: {adet} | Toplam Değer: {toplam:.3f}".replace('.', ',') if sayisal_adet > 0 else f"📊 Seçili Hücre: {adet} | Toplam Değer: 0,00")
 
     def basliklari_gorselle(self):
         for tablo in [self.table_et, self.table_tavuk]:
@@ -1620,11 +1621,11 @@ class StokSistemi(QMainWindow):
             hedef_tablo.setItem(row_idx, 1, SiralanabilirItem(gelis, self.tarih_gercek_degeri(gelis)))
             hedef_tablo.setItem(row_idx, 2, SiralanabilirItem(kullanim, self.tarih_gercek_degeri(kullanim)))
             hedef_tablo.setItem(row_idx, 3, SiralanabilirItem(kuvet_tar, self.tarih_gercek_degeri(kuvet_tar)))
-            hedef_tablo.setItem(row_idx, 4, SiralanabilirItem(f"{kuvet_mik:.2f} kg".replace('.', ','), kuvet_mik))
+            hedef_tablo.setItem(row_idx, 4, SiralanabilirItem(f"{kuvet_mik:.3f} kg".replace('.', ','), kuvet_mik))
             hedef_tablo.setItem(row_idx, 5, SiralanabilirItem(takoz_tar, self.tarih_gercek_degeri(takoz_tar)))
-            hedef_tablo.setItem(row_idx, 6, SiralanabilirItem(f"{takoz_mik:.2f} kg".replace('.', ','), takoz_mik))
-            hedef_tablo.setItem(row_idx, 7, SiralanabilirItem(f"{ilk_mik:.2f} kg".replace('.', ','), ilk_mik))
-            kalan_item = SiralanabilirItem(f"{kalan_mik:.2f} kg".replace('.', ','), kalan_mik)
+            hedef_tablo.setItem(row_idx, 6, SiralanabilirItem(f"{takoz_mik:.3f} kg".replace('.', ','), takoz_mik))
+            hedef_tablo.setItem(row_idx, 7, SiralanabilirItem(f"{ilk_mik:.3f} kg".replace('.', ','), ilk_mik))
+            kalan_item = SiralanabilirItem(f"{kalan_mik:.3f} kg".replace('.', ','), kalan_mik)
             if kalan_mik > 0 and kalan_mik <= (ilk_mik * 0.20): kalan_item.setForeground(QColor("#F38BA8"))
             elif kalan_mik == 0: kalan_item.setForeground(QColor("#A6ADC8"))
             hedef_tablo.setItem(row_idx, 8, kalan_item)
@@ -1634,7 +1635,7 @@ class StokSistemi(QMainWindow):
             elif tuketim_yuzdesi >= 40: tuk_item.setForeground(QColor("#F9E2AF"))  # sarı
             else: tuk_item.setForeground(QColor("#A6E3A1"))                        # yeşil
             hedef_tablo.setItem(row_idx, 9, tuk_item)
-            zayi_item = SiralanabilirItem(f"{zayi_mik:.2f} kg".replace('.', ','), zayi_mik)
+            zayi_item = SiralanabilirItem(f"{zayi_mik:.3f} kg".replace('.', ','), zayi_mik)
             if zayi_mik > 0: zayi_item.setForeground(QColor("#F9E2AF"))
             hedef_tablo.setItem(row_idx, 10, zayi_item)
             hedef_tablo.setItem(row_idx, 11, SiralanabilirItem(zayi_tar, self.tarih_gercek_degeri(zayi_tar)))
@@ -1666,10 +1667,10 @@ class StokSistemi(QMainWindow):
                         else:
                             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-        self.lbl_et_toplam.setText(f"🥩 ET STOK DURUMU\n\nGiren: {et_giren:.2f} kg\nKalan: {et_kalan:.2f} kg".replace('.', ','))
-        self.lbl_tavuk_toplam.setText(f"🍗 TAVUK STOK DURUMU\n\nGiren: {tavuk_giren:.2f} kg\nKalan: {tavuk_kalan:.2f} kg".replace('.', ','))
-        self.lbl_ort_7.setText(f"⏳ Son 7 Günlük Tüketim Ortalaması\n\nEt: {(son_7_et/7):.2f} kg/gün\nTavuk: {(son_7_tavuk/7):.2f} kg/gün".replace('.', ','))
-        self.lbl_ort_30.setText(f"📅 Son 30 Günlük Tüketim Ortalaması\n\nEt: {(son_30_et/30):.2f} kg/gün\nTavuk: {(son_30_tavuk/30):.2f} kg/gün".replace('.', ','))
+        self.lbl_et_toplam.setText(f"🥩 ET STOK DURUMU\n\nGiren: {et_giren:.3f} kg\nKalan: {et_kalan:.3f} kg".replace('.', ','))
+        self.lbl_tavuk_toplam.setText(f"🍗 TAVUK STOK DURUMU\n\nGiren: {tavuk_giren:.3f} kg\nKalan: {tavuk_kalan:.3f} kg".replace('.', ','))
+        self.lbl_ort_7.setText(f"⏳ Son 7 Günlük Tüketim Ortalaması\n\nEt: {(son_7_et/7):.3f} kg/gün\nTavuk: {(son_7_tavuk/7):.3f} kg/gün".replace('.', ','))
+        self.lbl_ort_30.setText(f"📅 Son 30 Günlük Tüketim Ortalaması\n\nEt: {(son_30_et/30):.3f} kg/gün\nTavuk: {(son_30_tavuk/30):.3f} kg/gün".replace('.', ','))
 
         self.table_et.setSortingEnabled(True)
         self.table_tavuk.setSortingEnabled(True)
@@ -1744,10 +1745,10 @@ class StokSistemi(QMainWindow):
                 QTableWidgetItem(tr_tar),
                 QTableWidgetItem(barkod),
                 QTableWidgetItem(kat),
-                QTableWidgetItem(f"{tr_mik:.2f} kg".replace('.', ',')),
+                QTableWidgetItem(f"{tr_mik:.3f} kg".replace('.', ',')),
                 QTableWidgetItem(tr_yon),
                 QTableWidgetItem(tr_isl),
-                QTableWidgetItem(f"{kalan:.2f} kg".replace('.', ',')),
+                QTableWidgetItem(f"{kalan:.3f} kg".replace('.', ',')),
                 QTableWidgetItem(str(uid)),
             ]
             for col, item in enumerate(items):
@@ -1760,12 +1761,12 @@ class StokSistemi(QMainWindow):
 
         # Özet kartları
         net = toplam_giris - toplam_cikis
-        self.lbl_tr_cikis_top.setText(f"→ Toplam Çıkış\n\n{toplam_cikis:.2f} kg".replace('.', ','))
-        self.lbl_tr_giris_top.setText(f"← Toplam Giriş\n\n{toplam_giris:.2f} kg".replace('.', ','))
+        self.lbl_tr_cikis_top.setText(f"→ Toplam Çıkış\n\n{toplam_cikis:.3f} kg".replace('.', ','))
+        self.lbl_tr_giris_top.setText(f"← Toplam Giriş\n\n{toplam_giris:.3f} kg".replace('.', ','))
         net_renk = "#A6E3A1" if net >= 0 else "#FAB387"
         self.lbl_tr_net.setStyleSheet(f"background-color: #313244; color: {net_renk}; border-radius: 12px; padding: 14px; font-size: 13px; font-weight: bold;")
         isaret = "+" if net >= 0 else ""
-        self.lbl_tr_net.setText(f"Net Bakiye\n\n{isaret}{net:.2f} kg".replace('.', ','))
+        self.lbl_tr_net.setText(f"Net Bakiye\n\n{isaret}{net:.3f} kg".replace('.', ','))
 
     def _duzenle_dialog_ac(self, urun_id):
         """Sağ tık Düzenle → tüm alanların düzenlenebileceği dialog"""
@@ -1808,7 +1809,7 @@ class StokSistemi(QMainWindow):
         def kg_widget(val):
             w = QDoubleSpinBox()
             w.setRange(0, 99999)
-            w.setDecimals(2)
+            w.setDecimals(3)
             w.setSuffix(" kg")
             w.setStyleSheet(ortak)
             try: w.setValue(float(val or 0))
@@ -1872,7 +1873,7 @@ class StokSistemi(QMainWindow):
 
         miktar_input = QDoubleSpinBox()
         miktar_input.setRange(0.01, 99999)
-        miktar_input.setDecimals(2)
+        miktar_input.setDecimals(3)
         miktar_input.setSuffix(" kg")
         miktar_input.setStyleSheet("background-color: #1E1E2E; color: #CDD6F4; border: 2px solid #313244; border-radius: 10px; padding: 6px;")
 
@@ -1964,7 +1965,7 @@ class StokSistemi(QMainWindow):
                 "kalan_miktar": yeni_kalan
             })
             self.verileri_yukle()
-            QMessageBox.information(self, "Başarılı", f"Transfer iptal edildi. Kalan: {yeni_kalan:.2f} kg")
+            QMessageBox.information(self, "Başarılı", f"Transfer iptal edildi. Kalan: {yeni_kalan:.3f} kg")
         except Exception as e:
             QMessageBox.critical(self, "Hata", str(e))
 
@@ -2036,10 +2037,10 @@ class StokSistemi(QMainWindow):
             r = self.table_gunluk.rowCount(); self.table_gunluk.insertRow(r)
             et = self.gunluk_veri[gun_key]["Et"]; tavuk = self.gunluk_veri[gun_key]["Tavuk"]; zayi = self.gunluk_veri[gun_key]["Zayi"]
             self.table_gunluk.setItem(r, 0, QTableWidgetItem(gun_key))
-            self.table_gunluk.setItem(r, 1, QTableWidgetItem(f"{et:.2f} kg".replace('.', ',')))
-            self.table_gunluk.setItem(r, 2, QTableWidgetItem(f"{tavuk:.2f} kg".replace('.', ',')))
-            self.table_gunluk.setItem(r, 3, QTableWidgetItem(f"{(et+tavuk):.2f} kg".replace('.', ',')))
-            zayi_item = QTableWidgetItem(f"{zayi:.2f} kg".replace('.', ','))
+            self.table_gunluk.setItem(r, 1, QTableWidgetItem(f"{et:.3f} kg".replace('.', ',')))
+            self.table_gunluk.setItem(r, 2, QTableWidgetItem(f"{tavuk:.3f} kg".replace('.', ',')))
+            self.table_gunluk.setItem(r, 3, QTableWidgetItem(f"{(et+tavuk):.3f} kg".replace('.', ',')))
+            zayi_item = QTableWidgetItem(f"{zayi:.3f} kg".replace('.', ','))
             if zayi > 0: zayi_item.setForeground(QColor("#F9E2AF"))
             self.table_gunluk.setItem(r, 4, zayi_item)
 
@@ -2047,10 +2048,10 @@ class StokSistemi(QMainWindow):
             r = self.table_haftalik.rowCount(); self.table_haftalik.insertRow(r)
             et = self.haftalik_veri[h_key]["Et"]; tavuk = self.haftalik_veri[h_key]["Tavuk"]; zayi = self.haftalik_veri[h_key]["Zayi"]
             self.table_haftalik.setItem(r, 0, QTableWidgetItem(h_key))
-            self.table_haftalik.setItem(r, 1, QTableWidgetItem(f"{et:.2f} kg".replace('.', ',')))
-            self.table_haftalik.setItem(r, 2, QTableWidgetItem(f"{tavuk:.2f} kg".replace('.', ',')))
-            self.table_haftalik.setItem(r, 3, QTableWidgetItem(f"{(et+tavuk):.2f} kg".replace('.', ',')))
-            zayi_item = QTableWidgetItem(f"{zayi:.2f} kg".replace('.', ','))
+            self.table_haftalik.setItem(r, 1, QTableWidgetItem(f"{et:.3f} kg".replace('.', ',')))
+            self.table_haftalik.setItem(r, 2, QTableWidgetItem(f"{tavuk:.3f} kg".replace('.', ',')))
+            self.table_haftalik.setItem(r, 3, QTableWidgetItem(f"{(et+tavuk):.3f} kg".replace('.', ',')))
+            zayi_item = QTableWidgetItem(f"{zayi:.3f} kg".replace('.', ','))
             if zayi > 0: zayi_item.setForeground(QColor("#F9E2AF"))
             self.table_haftalik.setItem(r, 4, zayi_item)
 
@@ -2058,15 +2059,15 @@ class StokSistemi(QMainWindow):
             r = self.table_aylik.rowCount(); self.table_aylik.insertRow(r)
             et = self.aylik_veri[ay_key]["Et"]; tavuk = self.aylik_veri[ay_key]["Tavuk"]; zayi = self.aylik_veri[ay_key]["Zayi"]
             self.table_aylik.setItem(r, 0, QTableWidgetItem(ay_key))
-            self.table_aylik.setItem(r, 1, QTableWidgetItem(f"{et:.2f} kg".replace('.', ',')))
-            self.table_aylik.setItem(r, 2, QTableWidgetItem(f"{tavuk:.2f} kg".replace('.', ',')))
-            self.table_aylik.setItem(r, 3, QTableWidgetItem(f"{(et+tavuk):.2f} kg".replace('.', ',')))
-            zayi_item = QTableWidgetItem(f"{zayi:.2f} kg".replace('.', ','))
+            self.table_aylik.setItem(r, 1, QTableWidgetItem(f"{et:.3f} kg".replace('.', ',')))
+            self.table_aylik.setItem(r, 2, QTableWidgetItem(f"{tavuk:.3f} kg".replace('.', ',')))
+            self.table_aylik.setItem(r, 3, QTableWidgetItem(f"{(et+tavuk):.3f} kg".replace('.', ',')))
+            zayi_item = QTableWidgetItem(f"{zayi:.3f} kg".replace('.', ','))
             if zayi > 0: zayi_item.setForeground(QColor("#F9E2AF"))
             self.table_aylik.setItem(r, 4, zayi_item)
 
         def _fmt(adet, kg):
-            return f"{adet} / {kg:.2f} kg".replace('.', ',') if adet > 0 else "-"
+            return f"{adet} / {kg:.3f} kg".replace('.', ',') if adet > 0 else "-"
         for (gun_key, kat) in sorted(self.gelen_koli_veri.keys(), key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"), reverse=True):
             d = self.gelen_koli_veri[(gun_key, kat)]
             r = self.table_gelen.rowCount(); self.table_gelen.insertRow(r)
@@ -2086,7 +2087,7 @@ class StokSistemi(QMainWindow):
             self.table_gelen.setItem(r, 10, QTableWidgetItem(_fmt(d["40_adet"],   d["40_kg"])))
             self.table_gelen.setItem(r, 11, QTableWidgetItem(_fmt(d["50_adet"],   d["50_kg"])))
             self.table_gelen.setItem(r, 12, QTableWidgetItem(_fmt(d["diger_adet"], d["diger_kg"])))
-            self.table_gelen.setItem(r, 13, QTableWidgetItem(f"{toplam_kg:.2f} kg".replace('.', ',')))
+            self.table_gelen.setItem(r, 13, QTableWidgetItem(f"{toplam_kg:.3f} kg".replace('.', ',')))
 
     def _stok_ozet_doldur(self, veriler):
         """Stok Özeti sekmesini doldur"""
@@ -2115,10 +2116,10 @@ class StokSistemi(QMainWindow):
             renk = QColor("#F38BA8") if kat == "Et" else QColor("#F9E2AF")
             items = [
                 QTableWidgetItem(kat),
-                QTableWidgetItem(f"{d['giren']:.2f} kg".replace('.', ',')),
-                QTableWidgetItem(f"{d['kalan']:.2f} kg".replace('.', ',')),
-                QTableWidgetItem(f"{d['tuketilen']:.2f} kg".replace('.', ',')),
-                QTableWidgetItem(f"{d['zayi']:.2f} kg".replace('.', ',')),
+                QTableWidgetItem(f"{d['giren']:.3f} kg".replace('.', ',')),
+                QTableWidgetItem(f"{d['kalan']:.3f} kg".replace('.', ',')),
+                QTableWidgetItem(f"{d['tuketilen']:.3f} kg".replace('.', ',')),
+                QTableWidgetItem(f"{d['zayi']:.3f} kg".replace('.', ',')),
                 QTableWidgetItem(f"% {oran:.1f}".replace('.', ',')),
             ]
             for col, item in enumerate(items):
@@ -2135,10 +2136,10 @@ class StokSistemi(QMainWindow):
         top_oran = (top_tuk / top_giren * 100) if top_giren > 0 else 0
         toplam_items = [
             QTableWidgetItem("TOPLAM"),
-            QTableWidgetItem(f"{top_giren:.2f} kg".replace('.', ',')),
-            QTableWidgetItem(f"{top_kalan:.2f} kg".replace('.', ',')),
-            QTableWidgetItem(f"{top_tuk:.2f} kg".replace('.', ',')),
-            QTableWidgetItem(f"{top_zayi:.2f} kg".replace('.', ',')),
+            QTableWidgetItem(f"{top_giren:.3f} kg".replace('.', ',')),
+            QTableWidgetItem(f"{top_kalan:.3f} kg".replace('.', ',')),
+            QTableWidgetItem(f"{top_tuk:.3f} kg".replace('.', ',')),
+            QTableWidgetItem(f"{top_zayi:.3f} kg".replace('.', ',')),
             QTableWidgetItem(f"% {top_oran:.1f}".replace('.', ',')),
         ]
         for col, item in enumerate(toplam_items):
