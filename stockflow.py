@@ -73,7 +73,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.02"
+UYGULAMA_VERSIYON = "v3.01"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -1138,9 +1138,9 @@ class StokSistemi(QMainWindow):
         tuketim_layout.setSpacing(6)
         tablolar_layout = QHBoxLayout()
         tablolar_layout.setSpacing(8)
-        self.table_gunluk = self._analiz_tablosu(["Günlük Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)", "Zayi (kg)"])
-        self.table_haftalik = self._analiz_tablosu(["Haftalık Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)", "Zayi (kg)"])
-        self.table_aylik = self._analiz_tablosu(["Aylık Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)", "Zayi (kg)"])
+        self.table_gunluk = self._analiz_tablosu(["Günlük Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)", "Zayi (kg)", "Paket Dağılımı"])
+        self.table_haftalik = self._analiz_tablosu(["Haftalık Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)", "Zayi (kg)", "Paket Dağılımı"])
+        self.table_aylik = self._analiz_tablosu(["Aylık Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)", "Zayi (kg)", "Paket Dağılımı"])
         tablolar_layout.addWidget(self.table_gunluk)
         tablolar_layout.addWidget(self.table_haftalik)
         tablolar_layout.addWidget(self.table_aylik)
@@ -1490,9 +1490,13 @@ class StokSistemi(QMainWindow):
 
         et_giren, et_kalan, tavuk_giren, tavuk_kalan = 0.0, 0.0, 0.0, 0.0
         son_7_et, son_7_tavuk, son_30_et, son_30_tavuk = 0.0, 0.0, 0.0, 0.0
-        self.gunluk_veri = defaultdict(lambda: {"Et": 0.0, "Tavuk": 0.0, "Zayi": 0.0})
-        self.haftalik_veri = defaultdict(lambda: {"Et": 0.0, "Tavuk": 0.0, "Zayi": 0.0})
-        self.aylik_veri = defaultdict(lambda: {"Et": 0.0, "Tavuk": 0.0, "Zayi": 0.0})
+        def _bos_veri():
+            return {"Et": 0.0, "Tavuk": 0.0, "Zayi": 0.0,
+                    "paket": {"4": 0, "6": 0, "8": 0, "10": 0, "12": 0,
+                               "15": 0, "20": 0, "30": 0, "40": 0, "50": 0, "diger": 0}}
+        self.gunluk_veri = defaultdict(_bos_veri)
+        self.haftalik_veri = defaultdict(_bos_veri)
+        self.aylik_veri = defaultdict(_bos_veri)
         self.gelen_koli_veri = defaultdict(lambda: {
             "4_adet": 0, "4_kg": 0.0, "6_adet": 0, "6_kg": 0.0,
             "8_adet": 0, "8_kg": 0.0, "10_adet": 0, "10_kg": 0.0,
@@ -1538,6 +1542,21 @@ class StokSistemi(QMainWindow):
                     self.gunluk_veri[gun_str][kategori] += ilk_kullanim_mik
                     self.haftalik_veri[hafta_str][kategori] += ilk_kullanim_mik
                     self.aylik_veri[ay_str][kategori] += ilk_kullanim_mik
+                    # Paket kg kategorisi tespiti
+                    if 3 <= ilk_mik < 5:       _pk = "4"
+                    elif 5 <= ilk_mik < 7:     _pk = "6"
+                    elif 7 <= ilk_mik < 9:     _pk = "8"
+                    elif 9 <= ilk_mik <= 11:   _pk = "10"
+                    elif 11 < ilk_mik <= 13:   _pk = "12"
+                    elif 14 <= ilk_mik <= 17:  _pk = "15"
+                    elif 19 <= ilk_mik <= 21:  _pk = "20"
+                    elif 28 <= ilk_mik <= 32:  _pk = "30"
+                    elif 38 <= ilk_mik <= 42:  _pk = "40"
+                    elif 48 <= ilk_mik <= 52:  _pk = "50"
+                    else:                       _pk = "diger"
+                    self.gunluk_veri[gun_str]["paket"][_pk] += 1
+                    self.haftalik_veri[hafta_str]["paket"][_pk] += 1
+                    self.aylik_veri[ay_str]["paket"][_pk] += 1
                     fark_gun = (bugun - t_obj).days
                     if 0 <= fark_gun <= 7:
                         if kategori == "Et": son_7_et += ilk_kullanim_mik
@@ -2033,6 +2052,15 @@ class StokSistemi(QMainWindow):
         self.table_gelen.setRowCount(0)
         self.table_stok_ozet.setRowCount(0)
 
+        def _paket_str(paket_dict):
+            parcalar = []
+            for kg in ["4","6","8","10","12","15","20","30","40","50","diger"]:
+                adet = paket_dict.get(kg, 0)
+                if adet > 0:
+                    etiket = "Diğer" if kg == "diger" else f"{kg}kg"
+                    parcalar.append(f"{adet}x{etiket}")
+            return ", ".join(parcalar) if parcalar else "-"
+
         for gun_key in sorted(self.gunluk_veri.keys(), key=lambda x: datetime.strptime(x, "%d.%m.%Y"), reverse=True):
             r = self.table_gunluk.rowCount(); self.table_gunluk.insertRow(r)
             et = self.gunluk_veri[gun_key]["Et"]; tavuk = self.gunluk_veri[gun_key]["Tavuk"]; zayi = self.gunluk_veri[gun_key]["Zayi"]
@@ -2043,6 +2071,7 @@ class StokSistemi(QMainWindow):
             zayi_item = QTableWidgetItem(f"{zayi:.3f} kg".replace('.', ','))
             if zayi > 0: zayi_item.setForeground(QColor("#F9E2AF"))
             self.table_gunluk.setItem(r, 4, zayi_item)
+            self.table_gunluk.setItem(r, 5, QTableWidgetItem(_paket_str(self.gunluk_veri[gun_key]["paket"])))
 
         for h_key in sorted(self.haftalik_veri.keys(), reverse=True):
             r = self.table_haftalik.rowCount(); self.table_haftalik.insertRow(r)
@@ -2054,6 +2083,7 @@ class StokSistemi(QMainWindow):
             zayi_item = QTableWidgetItem(f"{zayi:.3f} kg".replace('.', ','))
             if zayi > 0: zayi_item.setForeground(QColor("#F9E2AF"))
             self.table_haftalik.setItem(r, 4, zayi_item)
+            self.table_haftalik.setItem(r, 5, QTableWidgetItem(_paket_str(self.haftalik_veri[h_key]["paket"])))
 
         for ay_key in sorted(self.aylik_veri.keys(), reverse=True):
             r = self.table_aylik.rowCount(); self.table_aylik.insertRow(r)
@@ -2065,6 +2095,7 @@ class StokSistemi(QMainWindow):
             zayi_item = QTableWidgetItem(f"{zayi:.3f} kg".replace('.', ','))
             if zayi > 0: zayi_item.setForeground(QColor("#F9E2AF"))
             self.table_aylik.setItem(r, 4, zayi_item)
+            self.table_aylik.setItem(r, 5, QTableWidgetItem(_paket_str(self.aylik_veri[ay_key]["paket"])))
 
         def _fmt(adet, kg):
             return f"{adet} / {kg:.3f} kg".replace('.', ',') if adet > 0 else "-"
