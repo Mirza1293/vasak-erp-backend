@@ -27,6 +27,10 @@ jobs:
           python-version: '3.11'
           architecture: 'x64'
 
+      - name: Zbar sistem kütüphanesi kur (pyzbar için)
+        run: choco install zbar --yes
+        shell: pwsh
+
       - name: Bağımlılıkları yükle
         run: |
           python -m pip install --upgrade pip
@@ -35,6 +39,8 @@ jobs:
           pip install requests
           pip install Pillow
           pip install openpyxl
+          pip install pyzbar
+          pip install pylibdmtx
 
       - name: Versiyon oku
         id: version
@@ -46,7 +52,10 @@ jobs:
 
       - name: Exe yap
         run: |
-          python -m PyInstaller --onefile --windowed --name "StockFlow" stockflow.py
+          python -m PyInstaller --onefile --windowed --name "StockFlow" `
+            --collect-all pyzbar `
+            --collect-all pylibdmtx `
+            stockflow.py
 
       - name: Release oluştur
         uses: softprops/action-gh-release@v2
