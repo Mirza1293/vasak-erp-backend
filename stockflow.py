@@ -73,7 +73,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.03"
+UYGULAMA_VERSIYON = "v3.01"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -1163,6 +1163,49 @@ class StokSistemi(QMainWindow):
         stok_layout.addWidget(self.table_stok_ozet)
         self.analiz_tabs.addTab(tab_stok, "📊 Stok Özeti")
 
+        # Alt sekme: Paket Raporu
+        tab_paket = QWidget()
+        paket_layout = QVBoxLayout(tab_paket)
+        paket_layout.setContentsMargins(6, 6, 6, 6)
+
+        self.paket_alt_tabs = QTabWidget()
+        self.paket_alt_tabs.setStyleSheet(self.analiz_tabs.styleSheet())
+
+        # Günlük paket tablosu
+        tab_pk_gunluk = QWidget()
+        pk_g_layout = QVBoxLayout(tab_pk_gunluk)
+        pk_g_layout.setContentsMargins(4, 4, 4, 4)
+        self.table_paket_gunluk = self._analiz_tablosu([
+            "Tarih", "Paket (kg)", "Et Adet", "Et (kg)", "Tavuk Adet", "Tavuk (kg)", "Toplam Adet", "Toplam (kg)"
+        ])
+        pk_g_layout.addWidget(self.table_paket_gunluk)
+        self.paket_alt_tabs.addTab(tab_pk_gunluk, "📅 Günlük")
+
+        # Aylık paket tablosu
+        tab_pk_aylik = QWidget()
+        pk_a_layout = QVBoxLayout(tab_pk_aylik)
+        pk_a_layout.setContentsMargins(4, 4, 4, 4)
+        self.table_paket_aylik = self._analiz_tablosu([
+            "Ay", "Paket (kg)", "Et Adet", "Et (kg)", "Tavuk Adet", "Tavuk (kg)", "Toplam Adet", "Toplam (kg)"
+        ])
+        pk_a_layout.addWidget(self.table_paket_aylik)
+        self.paket_alt_tabs.addTab(tab_pk_aylik, "🗓️ Aylık")
+
+        # Genel özet (tüm zamanlar, paket bazlı kalan/kullanılan)
+        tab_pk_ozet = QWidget()
+        pk_o_layout = QVBoxLayout(tab_pk_ozet)
+        pk_o_layout.setContentsMargins(4, 4, 4, 4)
+        self.table_paket_ozet = self._analiz_tablosu([
+            "Paket (kg)", "Giren Adet", "Giren (kg)",
+            "Kullanılan Adet", "Kullanılan (kg)",
+            "Kalan Adet", "Kalan (kg)"
+        ])
+        pk_o_layout.addWidget(self.table_paket_ozet)
+        self.paket_alt_tabs.addTab(tab_pk_ozet, "📊 Genel Özet")
+
+        paket_layout.addWidget(self.paket_alt_tabs)
+        self.analiz_tabs.addTab(tab_paket, "📦 Paket Raporu")
+
         analiz_layout.addWidget(self.analiz_tabs)
 
         # Excel rapor butonu
@@ -1497,6 +1540,16 @@ class StokSistemi(QMainWindow):
         self.gunluk_veri = defaultdict(_bos_veri)
         self.haftalik_veri = defaultdict(_bos_veri)
         self.aylik_veri = defaultdict(_bos_veri)
+
+        # Paket raporu: {(donem, paket_kg): {Et_adet, Et_kg, Tavuk_adet, Tavuk_kg}}
+        _pk_bos = lambda: {"Et_adet": 0, "Et_kg": 0.0, "Tavuk_adet": 0, "Tavuk_kg": 0.0}
+        self.paket_gun_veri = defaultdict(_pk_bos)   # key: (gun_str, pk)
+        self.paket_ay_veri  = defaultdict(_pk_bos)   # key: (ay_str,  pk)
+        # Genel: {pk: {giren_adet, giren_kg, kullanilan_adet, kullanilan_kg, kalan_adet, kalan_kg}}
+        _pk_genel_bos = lambda: {"giren_adet": 0, "giren_kg": 0.0,
+                                  "kullanilan_adet": 0, "kullanilan_kg": 0.0,
+                                  "kalan_adet": 0, "kalan_kg": 0.0}
+        self.paket_genel_veri = defaultdict(_pk_genel_bos)
         self.gelen_koli_veri = defaultdict(lambda: {
             "4_adet": 0, "4_kg": 0.0, "6_adet": 0, "6_kg": 0.0,
             "8_adet": 0, "8_kg": 0.0, "10_adet": 0, "10_kg": 0.0,
@@ -1514,17 +1567,22 @@ class StokSistemi(QMainWindow):
                     g_obj = datetime.strptime(gelis, "%d.%m.%Y")
                     g_str = g_obj.strftime("%d.%m.%Y")
                     _gk = self.gelen_koli_veri[(g_str, kategori)]
-                    if 3 <= ilk_mik < 5:      _gk["4_adet"]  += 1; _gk["4_kg"]  += ilk_mik
-                    elif 5 <= ilk_mik < 7:    _gk["6_adet"]  += 1; _gk["6_kg"]  += ilk_mik
-                    elif 7 <= ilk_mik < 9:    _gk["8_adet"]  += 1; _gk["8_kg"]  += ilk_mik
-                    elif 9 <= ilk_mik <= 11:  _gk["10_adet"] += 1; _gk["10_kg"] += ilk_mik
-                    elif 11 < ilk_mik <= 13:  _gk["12_adet"] += 1; _gk["12_kg"] += ilk_mik
-                    elif 14 <= ilk_mik <= 17: _gk["15_adet"] += 1; _gk["15_kg"] += ilk_mik
-                    elif 19 <= ilk_mik <= 21: _gk["20_adet"] += 1; _gk["20_kg"] += ilk_mik
-                    elif 28 <= ilk_mik <= 32: _gk["30_adet"] += 1; _gk["30_kg"] += ilk_mik
-                    elif 38 <= ilk_mik <= 42: _gk["40_adet"] += 1; _gk["40_kg"] += ilk_mik
-                    elif 48 <= ilk_mik <= 52: _gk["50_adet"] += 1; _gk["50_kg"] += ilk_mik
-                    else:                      _gk["diger_adet"] += 1; _gk["diger_kg"] += ilk_mik
+                    if 3 <= ilk_mik < 5:      _gk["4_adet"]  += 1; _gk["4_kg"]  += ilk_mik; _gpk = "4"
+                    elif 5 <= ilk_mik < 7:    _gk["6_adet"]  += 1; _gk["6_kg"]  += ilk_mik; _gpk = "6"
+                    elif 7 <= ilk_mik < 9:    _gk["8_adet"]  += 1; _gk["8_kg"]  += ilk_mik; _gpk = "8"
+                    elif 9 <= ilk_mik <= 11:  _gk["10_adet"] += 1; _gk["10_kg"] += ilk_mik; _gpk = "10"
+                    elif 11 < ilk_mik <= 13:  _gk["12_adet"] += 1; _gk["12_kg"] += ilk_mik; _gpk = "12"
+                    elif 14 <= ilk_mik <= 17: _gk["15_adet"] += 1; _gk["15_kg"] += ilk_mik; _gpk = "15"
+                    elif 19 <= ilk_mik <= 21: _gk["20_adet"] += 1; _gk["20_kg"] += ilk_mik; _gpk = "20"
+                    elif 28 <= ilk_mik <= 32: _gk["30_adet"] += 1; _gk["30_kg"] += ilk_mik; _gpk = "30"
+                    elif 38 <= ilk_mik <= 42: _gk["40_adet"] += 1; _gk["40_kg"] += ilk_mik; _gpk = "40"
+                    elif 48 <= ilk_mik <= 52: _gk["50_adet"] += 1; _gk["50_kg"] += ilk_mik; _gpk = "50"
+                    else:                      _gk["diger_adet"] += 1; _gk["diger_kg"] += ilk_mik; _gpk = "diger"
+                    # Genel paket: giren ve kalan
+                    self.paket_genel_veri[_gpk]["giren_adet"] += 1
+                    self.paket_genel_veri[_gpk]["giren_kg"]   += ilk_mik
+                    self.paket_genel_veri[_gpk]["kalan_adet"] += 1 if kalan_mik > 0 else 0
+                    self.paket_genel_veri[_gpk]["kalan_kg"]   += kalan_mik
                 except ValueError: pass
 
             # İlk kullanım tüketimi (küvet ve takoz hariç)
@@ -1557,6 +1615,15 @@ class StokSistemi(QMainWindow):
                     self.gunluk_veri[gun_str]["paket"][_pk] += 1
                     self.haftalik_veri[hafta_str]["paket"][_pk] += 1
                     self.aylik_veri[ay_str]["paket"][_pk] += 1
+                    # Paket raporu: günlük ve aylık kullanım
+                    _kat = kategori  # "Et" veya "Tavuk"
+                    self.paket_gun_veri[(gun_str, _pk)][f"{_kat}_adet"] += 1
+                    self.paket_gun_veri[(gun_str, _pk)][f"{_kat}_kg"]   += ilk_kullanim_mik
+                    self.paket_ay_veri[(ay_str, _pk)][f"{_kat}_adet"]   += 1
+                    self.paket_ay_veri[(ay_str, _pk)][f"{_kat}_kg"]     += ilk_kullanim_mik
+                    # Genel: kullanılan
+                    self.paket_genel_veri[_pk]["kullanilan_adet"] += 1
+                    self.paket_genel_veri[_pk]["kullanilan_kg"]   += ilk_kullanim_mik
                     fark_gun = (bugun - t_obj).days
                     if 0 <= fark_gun <= 7:
                         if kategori == "Et": son_7_et += ilk_kullanim_mik
@@ -2051,6 +2118,9 @@ class StokSistemi(QMainWindow):
         self.table_aylik.setRowCount(0)
         self.table_gelen.setRowCount(0)
         self.table_stok_ozet.setRowCount(0)
+        self.table_paket_gunluk.setRowCount(0)
+        self.table_paket_aylik.setRowCount(0)
+        self.table_paket_ozet.setRowCount(0)
 
         def _paket_str(paket_dict):
             parcalar = []
@@ -2179,7 +2249,61 @@ class StokSistemi(QMainWindow):
             f = item.font(); f.setBold(True); item.setFont(f)
             self.table_stok_ozet.setItem(r, col, item)
 
-    def hizli_hucre_guncelle(self, satir, sutun, yeni_deger):
+        # ── Paket Raporu tabloları ──────────────────────────────────────────
+        PK_SIRASI = ["4","6","8","10","12","15","20","30","40","50","diger"]
+        PK_ETİKET = {"4":"4 kg","6":"6 kg","8":"8 kg","10":"10 kg","12":"12 kg",
+                     "15":"15 kg","20":"20 kg","30":"30 kg","40":"40 kg","50":"50 kg","diger":"Diğer"}
+
+        def _pk_satir(tablo, col0_val, gun_pk_dict):
+            """Her paket tipi için bir satır yazar. gun_pk_dict: {pk: {Et_adet,Et_kg,Tavuk_adet,Tavuk_kg}}"""
+            for pk in PK_SIRASI:
+                d = gun_pk_dict.get(pk)
+                if not d: continue
+                top_adet = d["Et_adet"] + d["Tavuk_adet"]
+                top_kg   = d["Et_kg"]   + d["Tavuk_kg"]
+                if top_adet == 0: continue
+                r = tablo.rowCount(); tablo.insertRow(r)
+                tablo.setItem(r, 0, QTableWidgetItem(col0_val))
+                tablo.setItem(r, 1, QTableWidgetItem(PK_ETİKET[pk]))
+                tablo.setItem(r, 2, QTableWidgetItem(str(d["Et_adet"])))
+                tablo.setItem(r, 3, QTableWidgetItem(f"{d['Et_kg']:.3f} kg".replace(".",",")))
+                tablo.setItem(r, 4, QTableWidgetItem(str(d["Tavuk_adet"])))
+                tablo.setItem(r, 5, QTableWidgetItem(f"{d['Tavuk_kg']:.3f} kg".replace(".",",")))
+                tablo.setItem(r, 6, QTableWidgetItem(str(top_adet)))
+                tablo.setItem(r, 7, QTableWidgetItem(f"{top_kg:.3f} kg".replace(".",",")))
+
+        # Günlük paket tablosu
+        gun_dict_agg = defaultdict(lambda: {pk: {"Et_adet":0,"Et_kg":0.0,"Tavuk_adet":0,"Tavuk_kg":0.0} for pk in PK_SIRASI})
+        for (gun_str, pk), d in self.paket_gun_veri.items():
+            for k,v in d.items(): gun_dict_agg[gun_str][pk][k] += v
+        for gun_key in sorted(gun_dict_agg.keys(), key=lambda x: datetime.strptime(x, "%d.%m.%Y"), reverse=True):
+            _pk_satir(self.table_paket_gunluk, gun_key, gun_dict_agg[gun_key])
+
+        # Aylık paket tablosu
+        ay_dict_agg = defaultdict(lambda: {pk: {"Et_adet":0,"Et_kg":0.0,"Tavuk_adet":0,"Tavuk_kg":0.0} for pk in PK_SIRASI})
+        for (ay_str, pk), d in self.paket_ay_veri.items():
+            for k,v in d.items(): ay_dict_agg[ay_str][pk][k] += v
+        try:
+            ay_sirali = sorted(ay_dict_agg.keys(), key=lambda x: datetime.strptime(x.split(" - ")[0] + "-" + x.split(" - ")[1].split(" ")[0], "%Y-%m"), reverse=True)
+        except Exception:
+            ay_sirali = sorted(ay_dict_agg.keys(), reverse=True)
+        for ay_key in ay_sirali:
+            _pk_satir(self.table_paket_aylik, ay_key, ay_dict_agg[ay_key])
+
+        # Genel özet tablosu
+        for pk in PK_SIRASI:
+            d = self.paket_genel_veri.get(pk)
+            if not d or d["giren_adet"] == 0: continue
+            r = self.table_paket_ozet.rowCount(); self.table_paket_ozet.insertRow(r)
+            self.table_paket_ozet.setItem(r, 0, QTableWidgetItem(PK_ETİKET[pk]))
+            self.table_paket_ozet.setItem(r, 1, QTableWidgetItem(str(d["giren_adet"])))
+            self.table_paket_ozet.setItem(r, 2, QTableWidgetItem(f"{d['giren_kg']:.3f} kg".replace(".",",")))
+            self.table_paket_ozet.setItem(r, 3, QTableWidgetItem(str(d["kullanilan_adet"])))
+            self.table_paket_ozet.setItem(r, 4, QTableWidgetItem(f"{d['kullanilan_kg']:.3f} kg".replace(".",",")))
+            self.table_paket_ozet.setItem(r, 5, QTableWidgetItem(str(d["kalan_adet"])))
+            kalan_item = QTableWidgetItem(f"{d['kalan_kg']:.3f} kg".replace(".",","))
+            if d["kalan_kg"] > 0: kalan_item.setForeground(QColor("#A6E3A1"))
+            self.table_paket_ozet.setItem(r, 6, kalan_item)
         tablo = self.aktif_tabloyu_al()
         if not tablo: return
         id_item = tablo.item(satir, 12)
