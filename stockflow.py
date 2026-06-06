@@ -7,13 +7,20 @@ import ctypes
 import requests
 from datetime import datetime
 from collections import defaultdict
-from PIL import Image
+from PIL import Image, ImageFilter, ImageEnhance
 try:
     from pyzbar.pyzbar import decode as pyzbar_decode
-    PYZBAR_AVAILABLE = True
+    PYZBAR_OK = True
 except ImportError:
-    PYZBAR_AVAILABLE = False
+    PYZBAR_OK = False
     def pyzbar_decode(img): return []
+
+try:
+    from pylibdmtx.pylibdmtx import decode as dmtx_decode
+    DMTX_OK = True
+except ImportError:
+    DMTX_OK = False
+    def dmtx_decode(img, timeout=0): return []
 import openpyxl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QSplashScreen, QStyledItemDelegate,
@@ -73,7 +80,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.06"
+UYGULAMA_VERSIYON = "v3.07"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -761,13 +768,53 @@ class UrunEkleDialog(QDialog):
 
     def gorselden_barkod_oku(self):
         dosya_yolu, _ = QFileDialog.getOpenFileName(self, "Etiket Görseli Seç", "", "Resim Dosyaları (*.png *.jpg *.jpeg *.bmp)")
-        if dosya_yolu:
-            try:
-                barkodlar = pyzbar_decode(Image.open(dosya_yolu))
-                if barkodlar: self.barkod_input.setText(barkodlar[0].data.decode('utf-8'))
-                else: QMessageBox.warning(self, "Hata", "Görselde barkod bulunamadı.")
-            except Exception as e:
-                QMessageBox.critical(self, "Hata", str(e))
+        if not dosya_yolu:
+            return
+        try:
+            img = Image.open(dosya_yolu)
+
+            def _dene(image):
+                # 1) pyzbar — klasik barkod
+                if PYZBAR_OK:
+                    sonuc = pyzbar_decode(image)
+                    if sonuc:
+                        return sonuc[0].data.decode("utf-8")
+                # 2) pylibdmtx — Data Matrix (QR benzeri kare kod)
+                if DMTX_OK:
+                    sonuc = dmtx_decode(image, timeout=3000)
+                    if sonuc:
+                        return sonuc[0].data.decode("utf-8")
+                return None
+
+            # Önce orijinal dene
+            bulunan = _dene(img)
+
+            # Bulunamazsa: gri + kontrast artır + tekrar dene
+            if not bulunan:
+                gri = img.convert("L")
+                for kontrast in [2.0, 3.0]:
+                    guclu = ImageEnhance.Contrast(gri).enhance(kontrast)
+                    bulunan = _dene(guclu)
+                    if bulunan:
+                        break
+
+            # Hâlâ bulunamazsa: keskinleştir
+            if not bulunan:
+                keskin = img.filter(ImageFilter.SHARPEN).filter(ImageFilter.SHARPEN)
+                bulunan = _dene(keskin)
+
+            if bulunan:
+                self.barkod_input.setText(bulunan)
+            else:
+                kutuphaneler = []
+                if not PYZBAR_OK:  kutuphaneler.append("pyzbar")
+                if not DMTX_OK:   kutuphaneler.append("pylibdmtx")
+                if kutuphaneler:
+                    QMessageBox.warning(self, "Hata", f"Görselde kod bulunamadı.\nEksik kütüphane: {', '.join(kutuphaneler)}")
+                else:
+                    QMessageBox.warning(self, "Hata", "Görselde barkod / Data Matrix bulunamadı.\nDaha net veya yakın bir fotoğraf deneyin.")
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", str(e))
 
     def verileri_al(self):
         return (self.barkod_input.text(), self.kategori_input.currentText(),
