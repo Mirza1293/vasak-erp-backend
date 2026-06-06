@@ -73,7 +73,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.02"
+UYGULAMA_VERSIYON = "v3.03"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
