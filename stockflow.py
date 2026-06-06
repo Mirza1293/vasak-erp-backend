@@ -613,6 +613,7 @@ class GelistirilmisTablo(QTableWidget):
         """)
 
         akt_duzenle = menu.addAction("✏️  Düzenle / Modal Aç")
+        akt_barkod = menu.addAction("🔢  Barkod Düzenle")
         akt_kopyala = menu.addAction("📋  Kopyala")
         menu.addSeparator()
         if transfer_var:
@@ -627,6 +628,19 @@ class GelistirilmisTablo(QTableWidget):
         if secilen == akt_duzenle:
             if self.ana_pencere:
                 self.ana_pencere._duzenle_dialog_ac(urun_id)
+
+        elif secilen == akt_barkod:
+            mevcut = self.item(satir, 0)
+            mevcut_barkod = mevcut.text() if mevcut else ""
+            from PyQt6.QtWidgets import QInputDialog
+            yeni_barkod, ok = QInputDialog.getText(self.ana_pencere, "Barkod Düzenle",
+                "Yeni barkod numarası:", text=mevcut_barkod)
+            if ok and yeni_barkod.strip():
+                try:
+                    self.ana_pencere.api.urun_guncelle(urun_id, {"barkod": yeni_barkod.strip()})
+                    self.ana_pencere.verileri_yukle()
+                except Exception as e:
+                    QMessageBox.critical(self.ana_pencere, "Hata", str(e))
 
         elif secilen == akt_kopyala:
             self.kopyala()
@@ -969,8 +983,55 @@ class StokSistemi(QMainWindow):
         self.ayarlar.setValue("tavuk_sort_col", tavuk_col if tavuk_col >= 0 else 0)
         self.ayarlar.setValue("tavuk_sort_order", tavuk_order)
         self.ayarlar.setValue("font_boyutu", self.global_font_boyutu)
+        # Sütun genişliklerini kaydet
+        for tbl_adi, tbl in [("et", self.table_et), ("tavuk", self.table_tavuk)]:
+            genislikler = [tbl.columnWidth(i) for i in range(tbl.columnCount())]
+            self.ayarlar.setValue(f"{tbl_adi}_col_widths", genislikler)
         self.ayarlar.sync()
         super().closeEvent(event)
+
+    def _stok_uyari_guncelle(self):
+        try:
+            esik_et = float(self.esik_et.value())
+            esik_tv = float(self.esik_tavuk.value())
+            # Kalan değerlerini lbl metninden oku
+            et_txt = self.lbl_et_toplam.text()
+            tv_txt = self.lbl_tavuk_toplam.text()
+            def _kalan(txt):
+                for satir in txt.split("\n"):
+                    if "Kalan:" in satir:
+                        try: return float(satir.split("Kalan:")[1].replace("kg","").replace(",",".").strip())
+                        except: pass
+                return 0.0
+            et_kal = _kalan(et_txt)
+            tv_kal = _kalan(tv_txt)
+            uyarilar = []
+            if esik_et > 0 and et_kal < esik_et:
+                uyarilar.append(f"🥩 Et stoğu kritik!  Kalan: {et_kal:.3f} kg  (Eşik: {esik_et:.0f} kg)".replace(".", ","))
+            if esik_tv > 0 and tv_kal < esik_tv:
+                uyarilar.append(f"🍗 Tavuk stoğu kritik!  Kalan: {tv_kal:.3f} kg  (Eşik: {esik_tv:.0f} kg)".replace(".", ","))
+            if uyarilar:
+                self.lbl_stok_uyari.setText("     |     ".join(uyarilar))
+                self.lbl_stok_uyari.setVisible(True)
+            else:
+                self.lbl_stok_uyari.setVisible(False)
+        except Exception:
+            pass
+
+    def _sutun_genisliklerini_yukle(self):
+        for tbl_adi, tbl in [("et", self.table_et), ("tavuk", self.table_tavuk)]:
+            kayitli = self.ayarlar.value(f"{tbl_adi}_col_widths")
+            if kayitli:
+                try:
+                    genislikler = [int(x) for x in kayitli]
+                    for i, g in enumerate(genislikler):
+                        if i < tbl.columnCount() and g > 0:
+                            tbl.setColumnWidth(i, g)
+                    continue
+                except Exception:
+                    pass
+            # Kayıtlı değer yoksa otomatik ayarla
+            tbl.resizeColumnsToContents()
 
     def _sutun_genisliklerini_ayarla(self):
         for tbl in [self.table_et, self.table_tavuk]:
@@ -1031,6 +1092,8 @@ class StokSistemi(QMainWindow):
         )
         # Kaydedilmiş font boyutunu uygula
         QTimer.singleShot(400, lambda: self.font_boyutu_degistir(0))
+        # Kaydedilmiş sütun genişliklerini yükle
+        QTimer.singleShot(600, self._sutun_genisliklerini_yukle)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1129,10 +1192,14 @@ class StokSistemi(QMainWindow):
         self.tabs.addTab(self.tab_analiz, "📊 Analiz & Raporlar")
         self.tabs.addTab(self.tab_transfer, "🔄 Transfer")
         self.tab_kisayollar = QWidget()
+        self.tab_manuel = QWidget()
         self.tabs.addTab(self.tab_kisayollar, "⌨️ Kısayollar")
+        self.tabs.addTab(self.tab_manuel, "📖 Kullanım Kılavuzu")
         layout.addWidget(self.tabs)
 
-        dash_layout = QHBoxLayout(self.tab_dashboard)
+        dash_layout = QVBoxLayout(self.tab_dashboard)
+        # Üst kart satırı
+        kart_satir = QHBoxLayout()
         self.lbl_et_toplam = QLabel("🥩 ET STOK DURUMU\n\nGiren: 0,00 kg\nKalan: 0,00 kg")
         self.lbl_et_toplam.setObjectName("kard_et")
         self.lbl_et_toplam.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1141,8 +1208,37 @@ class StokSistemi(QMainWindow):
         self.lbl_tavuk_toplam.setObjectName("kard_tavuk")
         self.lbl_tavuk_toplam.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_tavuk_toplam.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        dash_layout.addWidget(self.lbl_et_toplam)
-        dash_layout.addWidget(self.lbl_tavuk_toplam)
+        kart_satir.addWidget(self.lbl_et_toplam)
+        kart_satir.addWidget(self.lbl_tavuk_toplam)
+        dash_layout.addLayout(kart_satir)
+        # Stok uyarı kartı
+        self.lbl_stok_uyari = QLabel("")
+        self.lbl_stok_uyari.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_stok_uyari.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.lbl_stok_uyari.setStyleSheet("background-color: #F38BA8; color: #11111B; border-radius: 14px; padding: 14px; font-size: 15px; font-weight: bold;")
+        self.lbl_stok_uyari.setVisible(False)
+        dash_layout.addWidget(self.lbl_stok_uyari)
+        # Eşik ayar satırı
+        esik_satir = QHBoxLayout()
+        esik_satir.addStretch()
+        esik_lbl = QLabel("⚠️ Stok uyarı eşiği:")
+        esik_lbl.setStyleSheet("color: #A6ADC8; font-size: 13px;")
+        esik_satir.addWidget(esik_lbl)
+        self.esik_et = QDoubleSpinBox()
+        self.esik_et.setRange(0, 9999); self.esik_et.setDecimals(0); self.esik_et.setSuffix(" kg Et")
+        self.esik_et.setFixedWidth(120)
+        self.esik_et.setStyleSheet("background-color: #313244; color: #F38BA8; border-radius: 8px; padding: 4px; font-size: 13px;")
+        self.esik_et.setValue(float(self.ayarlar.value("esik_et", 50)))
+        self.esik_et.valueChanged.connect(lambda v: (self.ayarlar.setValue("esik_et", v), self._stok_uyari_guncelle()))
+        self.esik_tavuk = QDoubleSpinBox()
+        self.esik_tavuk.setRange(0, 9999); self.esik_tavuk.setDecimals(0); self.esik_tavuk.setSuffix(" kg Tavuk")
+        self.esik_tavuk.setFixedWidth(130)
+        self.esik_tavuk.setStyleSheet("background-color: #313244; color: #F9E2AF; border-radius: 8px; padding: 4px; font-size: 13px;")
+        self.esik_tavuk.setValue(float(self.ayarlar.value("esik_tavuk", 50)))
+        self.esik_tavuk.valueChanged.connect(lambda v: (self.ayarlar.setValue("esik_tavuk", v), self._stok_uyari_guncelle()))
+        esik_satir.addWidget(self.esik_et)
+        esik_satir.addWidget(self.esik_tavuk)
+        dash_layout.addLayout(esik_satir)
 
         et_layout = QVBoxLayout(self.tab_et)
         self.table_et = self.tablo_olustur()
@@ -1319,7 +1415,8 @@ class StokSistemi(QMainWindow):
             ("Ctrl + X", "Excel'e Aktar", "Tüm verileri Excel'e aktar"),
             ("Ctrl + Scroll ↑↓", "Punto Boyutu", "Tablo yazı boyutunu büyüt/küçült"),
             ("Çift Tıkla", "Düzenle", "Hücreyi düzenle (tarih/kg/yön için özel giriş)"),
-            ("Sağ Tıkla", "Menü", "Düzenle / Kopyala / Transfer / Sil menüsü"),
+            ("Sağ Tıkla", "Menü", "Düzenle / Barkod Düzenle / Kopyala / Transfer / Sil menüsü"),
+            ("Alt + F", "Hızlı Arama", "Barkod no veya kg ile ürün ara, satıra atla"),
         ]
 
         for kisayol, isim, aciklama in kisayol_data:
@@ -1335,6 +1432,72 @@ class StokSistemi(QMainWindow):
                 item = self.table_kisayollar.item(r, col)
                 if item:
                     item.setBackground(QColor("#24273A") if r % 2 == 0 else QColor("#1E1E2E"))
+
+        # ── KULLANIM KILAVUZU SEKMESİ ──
+        manuel_layout = QVBoxLayout(self.tab_manuel)
+        manuel_layout.setContentsMargins(16, 16, 16, 16)
+        from PyQt6.QtWidgets import QScrollArea, QTextBrowser
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        tb = QTextBrowser()
+        tb.setOpenExternalLinks(False)
+        tb.setStyleSheet("""
+            QTextBrowser { background-color: #1E1E2E; color: #CDD6F4;
+                           border: none; border-radius: 12px; padding: 20px;
+                           font-size: 14px; line-height: 1.6; }
+        """)
+        tb.setHtml("""
+        <h2 style='color:#FAB387;'>📖 StockFlow — Kullanım Kılavuzu</h2>
+        <hr style='border-color:#45475A;'/>
+
+        <h3 style='color:#A6E3A1;'>🏠 Ana Sayfa</h3>
+        <p>Et ve Tavuk stok durumunu özet kartlar halinde gösterir. Kalan miktar belirlediğiniz
+        <b>eşik değerinin</b> altına düştüğünde kırmızı uyarı kartı çıkar.<br/>
+        Eşik değerlerini sağ alttaki spinbox'lardan ayarlayabilirsiniz (otomatik kaydedilir).</p>
+
+        <h3 style='color:#A6E3A1;'>🥩 Et / 🍗 Tavuk Kayıtları</h3>
+        <ul>
+        <li><b>Yeni Kayıt:</b> Ctrl+N veya sağ üstteki buton. Barkod numarasını girin — kg otomatik hesaplanır.</li>
+        <li><b>Görsel Okuma:</b> Etiket fotoğrafından barkod veya Data Matrix (karekod) otomatik okunur.</li>
+        <li><b>Hücre Düzenleme:</b> Tarih hücrelerine çift tıklayınca takvim açılır. Kg hücrelerinde sayısal giriş.</li>
+        <li><b>Sağ Tık Menüsü:</b> Düzenle (tüm alanlar), Barkod Düzenle, Kopyala, Transfer, Sil.</li>
+        <li><b>Sıralama:</b> Başlığa tıklayınca artan/azalan sıralama. Son sıralama hatırlanır.</li>
+        <li><b>Sütun Genişliği:</b> Sürükleyerek ayarlayın — uygulama kapanınca otomatik kaydedilir.</li>
+        <li><b>Filtre:</b> Sütun başlığına sağ tık yaparak değer bazlı filtreleme.</li>
+        <li><b>Seçim İstatistiği:</b> Alt barda seçili kg toplamı gösterilir.</li>
+        </ul>
+
+        <h3 style='color:#A6E3A1;'>🔍 Hızlı Arama (Alt+F)</h3>
+        <p>Float pencere açılır. <b>Barkod numarası</b> veya <b>kg değeri</b> yazın.<br/>
+        Kg ile arama yaptığınızda aynı kg'daki tüm ürünler listelenir — barkod ile ayırt edebilirsiniz.<br/>
+        Listeden bir ürüne tıklandığında ilgili sekmeye geçip o satıra atlanır.</p>
+
+        <h3 style='color:#A6E3A1;'>📊 Analiz & Raporlar</h3>
+        <ul>
+        <li><b>Tüketim Analizi:</b> Günlük/Haftalık/Aylık et-tavuk tüketimi + paket dağılımı sütunu.</li>
+        <li><b>Gelen Ürün Analizi:</b> Geliş tarihine göre kg kategorisi dökümü.</li>
+        <li><b>Stok Özeti:</b> Toplam giren/kalan/tüketilen/zayi + kalan paket dağılımı.</li>
+        <li><b>Paket Raporu:</b> Günlük/Haftalık/Aylık kullanılan ve elimdeki paket sayıları (6kgx2 formatında).</li>
+        <li>Tüm analiz sütunları içeriğe göre otomatik genişler.</li>
+        </ul>
+
+        <h3 style='color:#A6E3A1;'>🔄 Transfer</h3>
+        <p>Sağ tık → Transfer Yap ile ürün başka işletmeye gönderilir. Transfer iptal edilince kalan otomatik güncellenir.</p>
+
+        <h3 style='color:#A6E3A1;'>📄 Excel Export</h3>
+        <p>Ctrl+X veya "Tüm Analizleri Excel'e Aktar" butonu ile Et, Tavuk, tüm analiz sekmeleri
+        ve Paket Raporu tek Excel dosyasına aktarılır.</p>
+
+        <h3 style='color:#A6E3A1;'>⚙️ İpuçları</h3>
+        <ul>
+        <li>Ctrl+Scroll ile tüm tablo yazı boyutunu büyütün/küçültün.</li>
+        <li>Etiket fotoğrafı bulanık veya parlak olsa bile kontrast artırma ile barkod okunmaya çalışılır.</li>
+        <li>Barkod numarasından ilk miktar otomatik hesaplanır — kontrol edin.</li>
+        </ul>
+        """)
+        scroll.setWidget(tb)
+        manuel_layout.addWidget(scroll)
 
         alt_bar = QHBoxLayout()
         self.lbl_secim_bilgi = QLabel("📊 Seçili Hücre: 0 | Toplam Değer: 0,00")
@@ -1368,6 +1531,7 @@ class StokSistemi(QMainWindow):
             ("F5", self.verileri_yukle),                                # Yenile
             ("Ctrl+B", self.excelden_iceri_aktar),                      # Excel'den al
             ("Ctrl+X", self.excel_disa_aktar),                         # Excel'e aktar
+            ("Alt+F", self.hizli_arama_ac),                            # Hızlı Arama
         ]
         for kisayol, fonksiyon in kisayollar:
             sc = QShortcut(QKeySequence(kisayol), self)
@@ -1781,6 +1945,7 @@ class StokSistemi(QMainWindow):
 
         self.lbl_et_toplam.setText(f"🥩 ET STOK DURUMU\n\nGiren: {et_giren:.3f} kg\nKalan: {et_kalan:.3f} kg".replace('.', ','))
         self.lbl_tavuk_toplam.setText(f"🍗 TAVUK STOK DURUMU\n\nGiren: {tavuk_giren:.3f} kg\nKalan: {tavuk_kalan:.3f} kg".replace('.', ','))
+        self._stok_uyari_guncelle()
         self.lbl_ort_7.setText(f"⏳ Son 7 Günlük Tüketim Ortalaması\n\nEt: {(son_7_et/7):.3f} kg/gün\nTavuk: {(son_7_tavuk/7):.3f} kg/gün".replace('.', ','))
         self.lbl_ort_30.setText(f"📅 Son 30 Günlük Tüketim Ortalaması\n\nEt: {(son_30_et/30):.3f} kg/gün\nTavuk: {(son_30_tavuk/30):.3f} kg/gün".replace('.', ','))
 
@@ -2343,6 +2508,112 @@ class StokSistemi(QMainWindow):
         self.table_stok_ozet.setItem(r_tv, 0, lbl_tv)
         self.table_stok_ozet.setItem(r_tv, 1, QTableWidgetItem(_pk_kalan_str("Tavuk")))
 
+        # Tüm analiz tablolarında sütunları içeriğe göre genişlet
+        for _at in [self.table_gunluk, self.table_haftalik, self.table_aylik,
+                    self.table_gelen, self.table_stok_ozet,
+                    self.table_paket_gunluk, self.table_paket_haftalik, self.table_paket_aylik]:
+            _at.resizeColumnsToContents()
+
+    def hizli_arama_ac(self):
+        """Alt+F — Float hızlı arama penceresi"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QLabel
+        dlg = QDialog(self)
+        dlg.setWindowTitle("🔍 Hızlı Arama")
+        dlg.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        dlg.resize(520, 380)
+        dlg.setStyleSheet(self.styleSheet())
+        lay = QVBoxLayout(dlg)
+        lay.setSpacing(8)
+
+        lbl = QLabel("Barkod numarası veya kg değeri girin:")
+        lbl.setStyleSheet("color: #A6ADC8; font-size: 13px;")
+        lay.addWidget(lbl)
+
+        inp = QLineEdit()
+        inp.setPlaceholderText("Örn: 99246... veya 30.71")
+        inp.setStyleSheet("background:#313244; color:#CDD6F4; border:2px solid #FAB387; border-radius:8px; padding:8px; font-size:14px;")
+        lay.addWidget(inp)
+
+        sonuc_lbl = QLabel("")
+        sonuc_lbl.setStyleSheet("color:#A6ADC8; font-size:12px;")
+        lay.addWidget(sonuc_lbl)
+
+        liste = QListWidget()
+        liste.setStyleSheet("""
+            QListWidget { background:#1E1E2E; color:#CDD6F4; border:1px solid #45475A; border-radius:8px; font-size:13px; }
+            QListWidget::item { padding:8px; border-bottom:1px solid #313244; }
+            QListWidget::item:selected { background:#45475A; }
+            QListWidget::item:hover { background:#313244; }
+        """)
+        lay.addWidget(liste)
+
+        # Arama verisi: tüm kayıtlar (et + tavuk)
+        def _tum_kayitlar():
+            kayitlar = []
+            for tablo, sekme_idx, kat in [(self.table_et, 1, "Et"), (self.table_tavuk, 2, "Tavuk")]:
+                for r in range(tablo.rowCount()):
+                    barkod_item = tablo.item(r, 0)
+                    ilk_item   = tablo.item(r, 7)
+                    kalan_item = tablo.item(r, 8)
+                    if not barkod_item: continue
+                    barkod = barkod_item.text()
+                    try: ilk = float(ilk_item.text().replace("kg","").replace(",",".").strip()) if ilk_item else 0
+                    except: ilk = 0
+                    try: kalan = float(kalan_item.text().replace("kg","").replace(",",".").strip()) if kalan_item else 0
+                    except: kalan = 0
+                    kayitlar.append({"barkod": barkod, "ilk": ilk, "kalan": kalan,
+                                     "sekme": sekme_idx, "satir": r, "kat": kat})
+            return kayitlar
+
+        kayitlar = _tum_kayitlar()
+
+        def _ara(metin):
+            liste.clear()
+            metin = metin.strip()
+            if len(metin) < 2:
+                sonuc_lbl.setText("")
+                return
+            sonuclar = []
+            # kg araması mı barkod araması mı?
+            try:
+                kg_ara = float(metin.replace(",", "."))
+                kg_mod = True
+            except ValueError:
+                kg_ara = None
+                kg_mod = False
+
+            for k in kayitlar:
+                if kg_mod:
+                    if abs(k["ilk"] - kg_ara) < 0.1:
+                        sonuclar.append(k)
+                else:
+                    if metin in k["barkod"]:
+                        sonuclar.append(k)
+
+            sonuc_lbl.setText(f"{len(sonuclar)} sonuç bulundu")
+            for k in sonuclar:
+                etiket = f"[{k['kat']}]  Barkod: {k['barkod']}  |  İlk: {k['ilk']:.3f} kg  |  Kalan: {k['kalan']:.3f} kg".replace(".", ",")
+                item = QListWidgetItem(etiket)
+                item.setData(Qt.ItemDataRole.UserRole, k)
+                if k["kat"] == "Et":
+                    item.setForeground(QColor("#F38BA8"))
+                else:
+                    item.setForeground(QColor("#F9E2AF"))
+                liste.addItem(item)
+
+        def _sec(item):
+            k = item.data(Qt.ItemDataRole.UserRole)
+            self.tabs.setCurrentIndex(k["sekme"])
+            tablo = self.table_et if k["sekme"] == 1 else self.table_tavuk
+            tablo.scrollToItem(tablo.item(k["satir"], 0))
+            tablo.selectRow(k["satir"])
+            dlg.close()
+
+        inp.textChanged.connect(_ara)
+        liste.itemDoubleClicked.connect(_sec)
+        inp.setFocus()
+        dlg.exec()
+
     def hizli_hucre_guncelle(self, satir, sutun, yeni_deger):
         tablo = self.aktif_tabloyu_al()
         if not tablo: return
@@ -2468,21 +2739,42 @@ class StokSistemi(QMainWindow):
         if not dosya_yolu: return
         try:
             wb = openpyxl.Workbook()
+
+            def _tablo_aktar(ws, tablo):
+                """QTableWidget → Excel sayfası"""
+                basliklar = [tablo.horizontalHeaderItem(c).text() if tablo.horizontalHeaderItem(c) else "" for c in range(tablo.columnCount())]
+                ws.append(basliklar)
+                for r in range(tablo.rowCount()):
+                    satir = []
+                    for c in range(tablo.columnCount()):
+                        item = tablo.item(r, c)
+                        satir.append(item.text() if item else "")
+                    ws.append(satir)
+
+            # Günlük / Haftalık / Aylık
             ws_g = wb.active; ws_g.title = "Günlük Çıkışlar"
-            ws_g.append(["Günlük Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)"])
-            for k in sorted(self.gunluk_veri.keys(), key=lambda x: datetime.strptime(x, "%d.%m.%Y"), reverse=True):
-                et = self.gunluk_veri[k]["Et"]; tavuk = self.gunluk_veri[k]["Tavuk"]
-                ws_g.append([k, et, tavuk, et + tavuk])
+            _tablo_aktar(ws_g, self.table_gunluk)
             ws_h = wb.create_sheet("Haftalık Çıkışlar")
-            ws_h.append(["Haftalık Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)"])
-            for k in sorted(self.haftalik_veri.keys(), reverse=True):
-                et = self.haftalik_veri[k]["Et"]; tavuk = self.haftalik_veri[k]["Tavuk"]
-                ws_h.append([k, et, tavuk, et + tavuk])
+            _tablo_aktar(ws_h, self.table_haftalik)
             ws_a = wb.create_sheet("Aylık Çıkışlar")
-            ws_a.append(["Aylık Periyot", "Et (kg)", "Tavuk (kg)", "Toplam (kg)"])
-            for k in sorted(self.aylik_veri.keys(), reverse=True):
-                et = self.aylik_veri[k]["Et"]; tavuk = self.aylik_veri[k]["Tavuk"]
-                ws_a.append([k, et, tavuk, et + tavuk])
+            _tablo_aktar(ws_a, self.table_aylik)
+
+            # Gelen Ürün Analizi
+            ws_gel = wb.create_sheet("Gelen Ürün Analizi")
+            _tablo_aktar(ws_gel, self.table_gelen)
+
+            # Stok Özeti
+            ws_st = wb.create_sheet("Stok Özeti")
+            _tablo_aktar(ws_st, self.table_stok_ozet)
+
+            # Paket Raporu
+            ws_pkg = wb.create_sheet("Paket Raporu Günlük")
+            _tablo_aktar(ws_pkg, self.table_paket_gunluk)
+            ws_pkh = wb.create_sheet("Paket Raporu Haftalık")
+            _tablo_aktar(ws_pkh, self.table_paket_haftalik)
+            ws_pka = wb.create_sheet("Paket Raporu Aylık")
+            _tablo_aktar(ws_pka, self.table_paket_aylik)
+
             wb.save(dosya_yolu)
             QMessageBox.information(self, "Başarılı", "Analiz raporu oluşturuldu!")
         except Exception as e:
