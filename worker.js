@@ -1,4 +1,4 @@
-// StockFlow v15.0 v15.0 — Cloudflare Worker + D1
+// StockFlow v15.0 — Cloudflare Worker + D1
 
 const JWT_SECRET = "vasak_gizli_anahtar_2025";
 const VASAK_SIFRE = "123456";
@@ -64,7 +64,7 @@ export default {
       }
     });
 
-    if (path === "/" || path === "/api/saglik") return json({ sistem: "StockFlow", versiyon: "v15.0 v15.0", durum: "çalışıyor 🐱" });
+    if (path === "/" || path === "/api/saglik") return json({ sistem: "StockFlow", versiyon: "v15.0", durum: "çalışıyor 🐱" });
 
     // ── GİRİŞ ──
     if (path === "/api/giris" && method === "POST") {
@@ -114,10 +114,14 @@ export default {
       if (method === "PUT") {
         try {
           const g = await request.json();
-          const izinli = ["barkod","gelis_tarihi","kullanim_tarihi","tekrar_kullanim_tarihi",
-            "kuvet_kullanim_tarihi","kuvet_miktar","takoz_kullanim_tarihi","takoz_miktar",
+          const izinli = [
+            "barkod","gelis_tarihi","kullanim_tarihi","tekrar_kullanim_tarihi",
+            "kuvet_kullanim_tarihi","kuvet_miktar",
+            "takoz_kullanim_tarihi","takoz_miktar",
+            "takoz2_kullanim_tarihi","takoz2_miktar",
             "kalan_miktar","tekrar_miktar","zayi_miktar","zayi_tarihi",
-            "transfer_miktar","transfer_tarihi","transfer_yon","transfer_isletme"];
+            "transfer_miktar","transfer_tarihi","transfer_yon","transfer_isletme"
+          ];
           const alanlar = Object.entries(g).filter(([k, v]) => izinli.includes(k) && v !== null && v !== undefined);
           if (!alanlar.length) return hata("Güncellenecek alan yok", 400);
           const set = alanlar.map(([k]) => `${k} = ?`).join(", ");
