@@ -5,7 +5,7 @@ import shutil
 import platform
 import ctypes
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from PIL import Image, ImageFilter, ImageEnhance
 try:
@@ -26,11 +26,13 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QSplashScreen, QStyledItemDelegate,
                              QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
                              QLineEdit, QHeaderView, QAbstractItemView,
-                             QDialog, QFormLayout, QDoubleSpinBox, QMessageBox,
+                             QDialog, QFormLayout, QDoubleSpinBox, QSpinBox, QMessageBox,
                              QFileDialog, QComboBox, QTabWidget, QLabel, QDateEdit,
-                             QListWidget, QListWidgetItem, QSizeGrip, QCheckBox)
+                             QListWidget, QListWidgetItem, QSizeGrip, QCheckBox,
+                             QTextEdit, QSplitter, QScrollArea, QTextBrowser)
 from PyQt6.QtCore import Qt, QDate, QTimer, QSettings, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QKeySequence, QIcon, QShortcut
+from PyQt6.QtSvgWidgets import QSvgWidget
 
 # ─────────────────────────────────────────
 #  SUNUCU AYARI — Render URL'nizi buraya girin
@@ -593,8 +595,8 @@ class GelistirilmisTablo(QTableWidget):
             if h and h.text() in ["Transfer (kg)", "Transfer Yön"]:
                 transfer_col = col - (0 if "kg" in (h.text() or "") else 2)
                 break
-        # Transfer miktar sütunu 12
-        tr_item = self.item(satir, 12)
+        # Transfer kontrolü: gizli sütun 14'ten oku
+        tr_item = self.item(satir, 14)
         transfer_var = False
         if tr_item:
             try:
@@ -877,10 +879,13 @@ class StokSistemi(QMainWindow):
         QApplication.instance().installEventFilter(self)
 
     def _yerel_yedek_kaydet(self, veriler):
-        """Verileri yerel JSON dosyasına yedekle"""
+        """Verileri yerel JSON dosyasına yedekle — son N yedek tutulur"""
         try:
             import json
-            yedek_yolu = os.path.join(self.veri_klasoru, YEDEK_DOSYA)
+            maks_yedek = int(self.ayarlar.value("maks_yedek", 5))
+            zaman = datetime.now().strftime("%Y%m%d_%H%M%S")
+            yedek_adi = f"stockflow_yedek_{zaman}.json"
+            yedek_yolu = os.path.join(self.veri_klasoru, yedek_adi)
             yedek = {
                 "tarih": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
                 "versiyon": UYGULAMA_VERSIYON,
@@ -888,6 +893,18 @@ class StokSistemi(QMainWindow):
                 "veriler": veriler
             }
             with open(yedek_yolu, 'w', encoding='utf-8') as f:
+                json.dump(yedek, f, ensure_ascii=False, indent=2, default=str)
+            # Eski yedekleri temizle
+            tum_yedekler = sorted([
+                f for f in os.listdir(self.veri_klasoru)
+                if f.startswith("stockflow_yedek_") and f.endswith(".json")
+            ], reverse=True)
+            for eski in tum_yedekler[maks_yedek:]:
+                try: os.remove(os.path.join(self.veri_klasoru, eski))
+                except: pass
+            # Geriye dönük uyumluluk için eski sabit dosyayı da güncelle
+            sabit_yol = os.path.join(self.veri_klasoru, YEDEK_DOSYA)
+            with open(sabit_yol, 'w', encoding='utf-8') as f:
                 json.dump(yedek, f, ensure_ascii=False, indent=2, default=str)
         except Exception as e:
             print(f"Yedekleme hatası: {e}")
@@ -992,6 +1009,92 @@ class StokSistemi(QMainWindow):
         self.ayarlar.setValue("font_boyutu", self.global_font_boyutu)
         self.ayarlar.sync()
         super().closeEvent(event)
+
+    def _stok_uyari_guncelle(self):
+        try:
+            esik_et = float(self.esik_et.value())
+            esik_tv = float(self.esik_tavuk.value())
+            def _kalan(txt):
+                for satir in txt.split("\n"):
+                    if "Kalan:" in satir:
+                        try: return float(satir.split("Kalan:")[1].replace("kg","").replace(",",".").strip())
+                        except: pass
+                return 0.0
+            et_kal = _kalan(self.lbl_et_toplam.text())
+            tv_kal = _kalan(self.lbl_tavuk_toplam.text())
+            uyarilar = []
+            if esik_et > 0 and et_kal < esik_et:
+                uyarilar.append(f"🥩 Et stoğu kritik!  Kalan: {et_kal:.3f} kg  (Eşik: {esik_et:.0f} kg)".replace(".", ","))
+            if esik_tv > 0 and tv_kal < esik_tv:
+                uyarilar.append(f"🍗 Tavuk stoğu kritik!  Kalan: {tv_kal:.3f} kg  (Eşik: {esik_tv:.0f} kg)".replace(".", ","))
+            if uyarilar:
+                self.lbl_stok_uyari.setText("     |     ".join(uyarilar))
+                self.lbl_stok_uyari.setVisible(True)
+            else:
+                self.lbl_stok_uyari.setVisible(False)
+        except Exception:
+            pass
+
+    def _tuketim_filtrele(self):
+        filtre = self.filtre_combo.currentText()
+        bugun = datetime.now().date()
+        if filtre == "Bu Hafta":
+            bas = bugun - timedelta(days=bugun.weekday()); bit = bugun
+        elif filtre == "Bu Ay":
+            bas = bugun.replace(day=1); bit = bugun
+        elif filtre == "Son 7 Gün":
+            bas = bugun - timedelta(days=7); bit = bugun
+        elif filtre == "Son 30 Gün":
+            bas = bugun - timedelta(days=30); bit = bugun
+        elif filtre == "Özel Aralık":
+            bas = self.filtre_baslangic.date().toPyDate()
+            bit = self.filtre_bitis.date().toPyDate()
+        else:
+            for r in range(self.table_gunluk.rowCount()):
+                self.table_gunluk.setRowHidden(r, False)
+            return
+        for r in range(self.table_gunluk.rowCount()):
+            item = self.table_gunluk.item(r, 0)
+            if not item: self.table_gunluk.setRowHidden(r, True); continue
+            try:
+                tarih = datetime.strptime(item.text(), "%d.%m.%Y").date()
+                self.table_gunluk.setRowHidden(r, not (bas <= tarih <= bit))
+            except: self.table_gunluk.setRowHidden(r, True)
+
+    def _dashboard_grafik_guncelle(self):
+        try:
+            bugun = datetime.now().date()
+            gunler = [(bugun - timedelta(days=i)) for i in range(6, -1, -1)]
+            et_d = [self.gunluk_veri.get(g.strftime("%d.%m.%Y"), {}).get("Et", 0.0) for g in gunler]
+            tv_d = [self.gunluk_veri.get(g.strftime("%d.%m.%Y"), {}).get("Tavuk", 0.0) for g in gunler]
+            maks = max(max(et_d, default=0), max(tv_d, default=0), 1)
+            W, H, pl, pr, pt, pb = 800, 260, 45, 20, 24, 36
+            cw, ch = W - pl - pr, H - pt - pb
+            n = len(gunler); gw = cw / n; bw = gw * 0.32
+            bars = grid = labels = ""
+            for i, gun in enumerate(gunler):
+                xc = pl + i * gw + gw / 2
+                for val, color, xoff in [(et_d[i], "#F38BA8", -bw - 2), (tv_d[i], "#F9E2AF", 2)]:
+                    bh = max((val / maks) * ch, 0.5); bx = xc + xoff; by = pt + ch - bh
+                    bars += f'<rect x="{bx:.1f}" y="{by:.1f}" width="{bw:.1f}" height="{bh:.1f}" fill="{color}" rx="3" opacity="0.9"/>'
+                    if val > 0:
+                        bars += f'<text x="{bx+bw/2:.1f}" y="{by-4:.1f}" text-anchor="middle" fill="{color}" font-size="10" font-weight="bold">{val:.1f}</text>'
+                labels += f'<text x="{xc:.1f}" y="{pt+ch+20}" text-anchor="middle" fill="#A6ADC8" font-size="11">{gun.strftime("%d.%m")}</text>'
+            for yi in range(5):
+                y = pt + ch - (yi / 4) * ch; v = (yi / 4) * maks
+                grid += f'<line x1="{pl}" y1="{y:.1f}" x2="{W-pr}" y2="{y:.1f}" stroke="#313244" stroke-width="1"/>'
+                grid += f'<text x="{pl-4}" y="{y+4:.1f}" text-anchor="end" fill="#585B70" font-size="10">{v:.0f}</text>'
+            legend = (f'<rect x="{pl}" y="6" width="12" height="12" fill="#F38BA8" rx="2"/>'
+                      f'<text x="{pl+16}" y="16" fill="#F38BA8" font-size="11">Et</text>'
+                      f'<rect x="{pl+50}" y="6" width="12" height="12" fill="#F9E2AF" rx="2"/>'
+                      f'<text x="{pl+66}" y="16" fill="#F9E2AF" font-size="11">Tavuk</text>')
+            svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
+                   f'preserveAspectRatio="xMidYMid meet" '
+                   f'style="background:#1E1E2E;border-radius:12px;">'
+                   f'{grid}{bars}{labels}{legend}</svg>')
+            self.lbl_grafik.load(svg.encode('utf-8'))
+        except Exception:
+            pass
 
     def _log_yaz(self, tur, islem, detay=""):
         zaman = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
@@ -1268,17 +1371,63 @@ class StokSistemi(QMainWindow):
         yonetim_layout.addWidget(self.yonetim_tabs)
         layout.addWidget(self.tabs)
 
-        dash_layout = QHBoxLayout(self.tab_dashboard)
-        self.lbl_et_toplam = QLabel("🥩 ET STOK DURUMU\n\nGiren: 0,00 kg\nKalan: 0,00 kg")
+        dash_layout = QVBoxLayout(self.tab_dashboard)
+        dash_layout.setSpacing(6)
+        dash_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Üst satır: stok kartları
+        kart_satir = QHBoxLayout()
+        kart_satir.setSpacing(10)
+        self.lbl_et_toplam = QLabel("🥩 ET STOK DURUMU\n\nGiren: 0,000 kg\nKalan: 0,000 kg")
         self.lbl_et_toplam.setObjectName("kard_et")
         self.lbl_et_toplam.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_et_toplam.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        self.lbl_tavuk_toplam = QLabel("🍗 TAVUK STOK DURUMU\n\nGiren: 0,00 kg\nKalan: 0,00 kg")
+        self.lbl_et_toplam.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        self.lbl_et_toplam.setMinimumHeight(130)
+        self.lbl_et_toplam.setMaximumHeight(160)
+        self.lbl_tavuk_toplam = QLabel("🍗 TAVUK STOK DURUMU\n\nGiren: 0,000 kg\nKalan: 0,000 kg")
         self.lbl_tavuk_toplam.setObjectName("kard_tavuk")
         self.lbl_tavuk_toplam.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_tavuk_toplam.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        dash_layout.addWidget(self.lbl_et_toplam)
-        dash_layout.addWidget(self.lbl_tavuk_toplam)
+        self.lbl_tavuk_toplam.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        self.lbl_tavuk_toplam.setMinimumHeight(130)
+        self.lbl_tavuk_toplam.setMaximumHeight(160)
+        kart_satir.addWidget(self.lbl_et_toplam)
+        kart_satir.addWidget(self.lbl_tavuk_toplam)
+        dash_layout.addLayout(kart_satir)
+
+        # Uyarı + eşik satırı
+        alt_ust = QHBoxLayout()
+        self.lbl_stok_uyari = QLabel("")
+        self.lbl_stok_uyari.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_stok_uyari.setStyleSheet("background-color: #F38BA8; color: #11111B; border-radius: 8px; padding: 6px; font-size: 13px; font-weight: bold;")
+        self.lbl_stok_uyari.setFixedHeight(36)
+        self.lbl_stok_uyari.setVisible(False)
+        alt_ust.addWidget(self.lbl_stok_uyari, 1)
+        esik_lbl = QLabel("⚠️ Eşik:")
+        esik_lbl.setStyleSheet("color:#A6ADC8; font-size:12px;")
+        self.esik_et = QDoubleSpinBox()
+        self.esik_et.setRange(0, 9999); self.esik_et.setDecimals(0); self.esik_et.setSuffix(" kg Et")
+        self.esik_et.setFixedWidth(110)
+        self.esik_et.setStyleSheet("background-color:#313244; color:#F38BA8; border-radius:6px; padding:3px; font-size:12px;")
+        self.esik_et.setValue(float(self.ayarlar.value("esik_et", 50)))
+        self.esik_et.valueChanged.connect(lambda v: (self.ayarlar.setValue("esik_et", v), self._stok_uyari_guncelle()))
+        self.esik_tavuk = QDoubleSpinBox()
+        self.esik_tavuk.setRange(0, 9999); self.esik_tavuk.setDecimals(0); self.esik_tavuk.setSuffix(" kg Tavuk")
+        self.esik_tavuk.setFixedWidth(120)
+        self.esik_tavuk.setStyleSheet("background-color:#313244; color:#F9E2AF; border-radius:6px; padding:3px; font-size:12px;")
+        self.esik_tavuk.setValue(float(self.ayarlar.value("esik_tavuk", 50)))
+        self.esik_tavuk.valueChanged.connect(lambda v: (self.ayarlar.setValue("esik_tavuk", v), self._stok_uyari_guncelle()))
+        alt_ust.addWidget(esik_lbl)
+        alt_ust.addWidget(self.esik_et)
+        alt_ust.addWidget(self.esik_tavuk)
+        dash_layout.addLayout(alt_ust)
+
+        # Grafik
+        lbl_grafik_baslik = QLabel("📊 Son 7 Gün — Günlük Tüketim (kg)")
+        lbl_grafik_baslik.setStyleSheet("color:#FAB387; font-weight:bold; font-size:13px; padding:2px;")
+        dash_layout.addWidget(lbl_grafik_baslik)
+        self.lbl_grafik = QSvgWidget()
+        self.lbl_grafik.setMinimumHeight(200)
+        dash_layout.addWidget(self.lbl_grafik, 1)
 
         et_layout = QVBoxLayout(self.tab_et)
         self.table_et = self.tablo_olustur()
@@ -1318,6 +1467,39 @@ class StokSistemi(QMainWindow):
         tab_tuketim = QWidget()
         tuketim_layout = QVBoxLayout(tab_tuketim)
         tuketim_layout.setContentsMargins(6, 6, 6, 6)
+
+        # Tarih filtresi
+        filtre_bar = QHBoxLayout()
+        lbl_filtre = QLabel("📅 Filtre:")
+        lbl_filtre.setStyleSheet("color:#A6ADC8; font-size:13px;")
+        self.filtre_combo = QComboBox()
+        self.filtre_combo.addItems(["Tümü", "Bu Hafta", "Bu Ay", "Son 7 Gün", "Son 30 Gün", "Özel Aralık"])
+        self.filtre_combo.setStyleSheet("background:#313244; color:#CDD6F4; border-radius:6px; padding:4px 8px; font-size:13px;")
+        self.filtre_combo.setFixedWidth(150)
+        self.filtre_baslangic = QDateEdit(); self.filtre_baslangic.setCalendarPopup(True)
+        self.filtre_baslangic.setDate(QDate.currentDate().addDays(-30))
+        self.filtre_baslangic.setStyleSheet("background:#313244; color:#CDD6F4; border-radius:6px; padding:4px; font-size:13px;")
+        self.filtre_baslangic.setFixedWidth(120); self.filtre_baslangic.setVisible(False)
+        self.filtre_bitis = QDateEdit(); self.filtre_bitis.setCalendarPopup(True)
+        self.filtre_bitis.setDate(QDate.currentDate())
+        self.filtre_bitis.setStyleSheet("background:#313244; color:#CDD6F4; border-radius:6px; padding:4px; font-size:13px;")
+        self.filtre_bitis.setFixedWidth(120); self.filtre_bitis.setVisible(False)
+        lbl_tire = QLabel("—"); lbl_tire.setStyleSheet("color:#A6ADC8;"); lbl_tire.setVisible(False)
+        btn_filtre_uygula = QPushButton("Uygula")
+        btn_filtre_uygula.setStyleSheet("background:#A6E3A1; color:#11111B; border-radius:6px; padding:4px 12px; font-size:13px; font-weight:bold;")
+        btn_filtre_uygula.setVisible(False)
+        def _filtre_degisti(metin):
+            ozel = metin == "Özel Aralık"
+            self.filtre_baslangic.setVisible(ozel); self.filtre_bitis.setVisible(ozel)
+            lbl_tire.setVisible(ozel); btn_filtre_uygula.setVisible(ozel)
+            if not ozel: self._tuketim_filtrele()
+        self.filtre_combo.currentTextChanged.connect(_filtre_degisti)
+        btn_filtre_uygula.clicked.connect(self._tuketim_filtrele)
+        filtre_bar.addWidget(lbl_filtre); filtre_bar.addWidget(self.filtre_combo)
+        filtre_bar.addWidget(self.filtre_baslangic); filtre_bar.addWidget(lbl_tire)
+        filtre_bar.addWidget(self.filtre_bitis); filtre_bar.addWidget(btn_filtre_uygula)
+        filtre_bar.addStretch()
+        tuketim_layout.addLayout(filtre_bar)
         tuketim_layout.setSpacing(6)
         tablolar_layout = QHBoxLayout()
         tablolar_layout.setSpacing(8)
@@ -1473,7 +1655,6 @@ class StokSistemi(QMainWindow):
                     item.setBackground(QColor("#24273A") if r % 2 == 0 else QColor("#1E1E2E"))
 
         # ── KULLANIM KILAVUZU SEKMESİ ──
-        from PyQt6.QtWidgets import QScrollArea, QTextBrowser
         klavuz_layout = QVBoxLayout(self.tab_klavuz)
         klavuz_layout.setContentsMargins(8, 8, 8, 8)
         scroll = QScrollArea()
@@ -1540,10 +1721,19 @@ class StokSistemi(QMainWindow):
         log_ust.addWidget(btn_log_temizle)
         log_layout.addLayout(log_ust)
         self.table_log = self._analiz_tablosu(["Tarih/Saat", "Tür", "İşlem", "Detay"])
-        self.table_log.setColumnWidth(0, 150)
-        self.table_log.setColumnWidth(1, 70)
-        self.table_log.setColumnWidth(2, 160)
+        self.table_log.setColumnWidth(0, 150); self.table_log.setColumnWidth(1, 70); self.table_log.setColumnWidth(2, 160)
         log_layout.addWidget(self.table_log)
+        # Yedek ayarı
+        yedek_bar = QHBoxLayout()
+        lbl_yedek = QLabel("💾 Tutulacak yedek sayısı:")
+        lbl_yedek.setStyleSheet("color:#A6ADC8; font-size:12px;")
+        self.spin_maks_yedek = QSpinBox()
+        self.spin_maks_yedek.setRange(1, 30); self.spin_maks_yedek.setValue(int(self.ayarlar.value("maks_yedek", 5)))
+        self.spin_maks_yedek.setStyleSheet("background:#313244; color:#CDD6F4; border-radius:6px; padding:4px; font-size:12px;")
+        self.spin_maks_yedek.setFixedWidth(70)
+        self.spin_maks_yedek.valueChanged.connect(lambda v: self.ayarlar.setValue("maks_yedek", v))
+        yedek_bar.addWidget(lbl_yedek); yedek_bar.addWidget(self.spin_maks_yedek); yedek_bar.addStretch()
+        log_layout.addLayout(yedek_bar)
 
         alt_bar = QHBoxLayout()
         self.lbl_secim_bilgi = QLabel("📊 Seçili Hücre: 0 | Toplam Değer: 0,00")
@@ -2030,6 +2220,8 @@ class StokSistemi(QMainWindow):
         self.lbl_tavuk_toplam.setText(f"🍗 TAVUK STOK DURUMU\n\nGiren: {tavuk_giren:.3f} kg\nKalan: {tavuk_kalan:.3f} kg".replace('.', ','))
         self.lbl_ort_7.setText(f"⏳ Son 7 Günlük Tüketim Ortalaması\n\nEt: {(son_7_et/7):.3f} kg/gün\nTavuk: {(son_7_tavuk/7):.3f} kg/gün".replace('.', ','))
         self.lbl_ort_30.setText(f"📅 Son 30 Günlük Tüketim Ortalaması\n\nEt: {(son_30_et/30):.3f} kg/gün\nTavuk: {(son_30_tavuk/30):.3f} kg/gün".replace('.', ','))
+        self._stok_uyari_guncelle()
+        self._dashboard_grafik_guncelle()
 
         self.table_et.setSortingEnabled(True)
         self.table_tavuk.setSortingEnabled(True)
@@ -2138,7 +2330,6 @@ class StokSistemi(QMainWindow):
             QMessageBox.critical(self, "Hata", str(e))
             return
 
-        from PyQt6.QtWidgets import QDialog, QFormLayout, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
         dlg = QDialog(self)
         dlg.setWindowTitle("📦 Takoz 2. Kullanım")
         dlg.setFixedWidth(340)
@@ -2387,9 +2578,16 @@ class StokSistemi(QMainWindow):
         yon_input.addItems(["Çıkış", "Giriş"])
         yon_input.setStyleSheet("background-color: #1E1E2E; color: #CDD6F4; border: 2px solid #313244; border-radius: 10px; padding: 6px;")
 
-        isletme_input = QLineEdit()
-        isletme_input.setPlaceholderText("İşletme adı...")
-        isletme_input.setStyleSheet("background-color: #1E1E2E; color: #CDD6F4; border: 2px solid #313244; border-radius: 10px; padding: 8px;")
+        isletme_input = QComboBox()
+        isletme_input.setEditable(True)
+        isletme_input.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        isletme_input.lineEdit().setPlaceholderText("İşletme adı yazın veya seçin...")
+        isletme_input.setStyleSheet("background-color: #1E1E2E; color: #CDD6F4; border: 2px solid #313244; border-radius: 10px; padding: 6px;")
+        # Kaydedilmiş işletmeleri yükle
+        kayitli_isletmeler = self.ayarlar.value("transfer_isletmeler", []) or []
+        if isinstance(kayitli_isletmeler, str): kayitli_isletmeler = [kayitli_isletmeler]
+        isletme_input.addItems(kayitli_isletmeler)
+        isletme_input.setCurrentText("")
 
         form.addRow("Miktar:", miktar_input)
         form.addRow("Tarih:", tarih_input)
@@ -2411,20 +2609,31 @@ class StokSistemi(QMainWindow):
             mik = miktar_input.value()
             tar = tarih_input.date().toString("dd.MM.yyyy")
             yon = yon_input.currentText()
-            isl = isletme_input.text().strip() or "-"
+            isl = isletme_input.currentText().strip() or "-"
+            # Yeni işletmeyi listeye kaydet
+            if isl and isl != "-":
+                kayitli = self.ayarlar.value("transfer_isletmeler", []) or []
+                if isinstance(kayitli, str): kayitli = [kayitli]
+                if isl not in kayitli:
+                    kayitli.append(isl)
+                    self.ayarlar.setValue("transfer_isletmeler", kayitli)
+                    self.ayarlar.sync()
             try:
                 ilk = float((tablo.item(satir,7) or QTableWidgetItem("0")).text().replace("kg","").replace(",",".").strip())
                 kuvet = float((tablo.item(satir,4) or QTableWidgetItem("0")).text().replace("kg","").replace(",",".").strip())
                 takoz = float((tablo.item(satir,6) or QTableWidgetItem("0")).text().replace("kg","").replace(",",".").strip())
                 zayi = float((tablo.item(satir,10) or QTableWidgetItem("0")).text().replace("kg","").replace(",",".").strip())
-                yeni_kalan = max(0.0, ilk - kuvet - takoz - zayi - mik)
+                takoz2_v = float(tablo.item(satir,13).text()) if tablo.item(satir,13) else 0.0
+                yeni_kalan = max(0.0, ilk - kuvet - takoz - takoz2_v - zayi - mik)
                 self.api.urun_guncelle(urun_id, {
                     "transfer_miktar": mik, "transfer_tarihi": tar,
                     "transfer_yon": yon, "transfer_isletme": isl,
                     "kalan_miktar": yeni_kalan
                 })
+                self._log_yaz("İşlem", "Transfer Yapıldı", f"Barkod: {tablo.item(satir,0).text() if tablo.item(satir,0) else '?'} | {yon} | {isl} | {mik:.3f} kg")
                 self.verileri_yukle()
             except Exception as e:
+                self._log_yaz("Hata", "Transfer Hatası", str(e)[:200])
                 QMessageBox.critical(self, "Hata", str(e))
 
     def secili_transferi_iptal_et(self):
@@ -2790,7 +2999,6 @@ class StokSistemi(QMainWindow):
     def toplu_giris_ac(self):
         idx = self.tabs.currentIndex()
         varsayilan_kat = "Et" if idx == 1 else "Tavuk" if idx == 2 else "Et"
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QComboBox, QDateEdit, QTextEdit, QSplitter
         dlg = QDialog(self)
         dlg.setWindowTitle("📋 Toplu Giriş")
         dlg.resize(900, 580)
@@ -2886,7 +3094,6 @@ class StokSistemi(QMainWindow):
         lay.addLayout(alt); dlg.exec()
 
     def hizli_arama_ac(self):
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QLabel
         dlg = QDialog(self)
         dlg.setWindowTitle("🔍 Hızlı Arama")
         dlg.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
