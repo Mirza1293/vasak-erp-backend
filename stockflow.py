@@ -1603,6 +1603,8 @@ class StokSistemi(QMainWindow):
 
         for row_data in veriler:
             _id, barkod, kategori, gelis, kullanim, kuvet_tar, kuvet_mik, takoz_tar, takoz_mik, takoz2_tar, takoz2_mik, ilk_mik, kalan_mik, zayi_mik, zayi_tar, transfer_mik, transfer_tar, transfer_yon, transfer_isletme = row_data
+            takoz2_mik = float(takoz2_mik or 0)
+            takoz2_tar = takoz2_tar or "-"
 
             if gelis != "-":
                 try:
@@ -1724,13 +1726,13 @@ class StokSistemi(QMainWindow):
                         else: son_30_tavuk += takoz_mik
                 except: pass
             # Takoz 2. kullanım analizi
-            if takoz2_mik > 0 and takoz2_tar != "-":
+            if takoz2_mik and takoz2_mik > 0 and takoz2_tar and takoz2_tar != "-":
                 try:
                     t_obj = None
                     for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
                         try: t_obj = datetime.strptime(takoz2_tar, fmt); break
                         except: pass
-                    if not t_obj: raise ValueError()
+                    if not t_obj: raise ValueError(f"Tarih parse hatası: {takoz2_tar!r}")
                     gun_str = t_obj.strftime('%d.%m.%Y')
                     hafta_str = f"{t_obj.strftime('%Y')} - {t_obj.strftime('%W')}. Hafta"
                     ay_str = f"{t_obj.strftime('%Y')} - {t_obj.strftime('%m')} ({self.aylar.get(t_obj.strftime('%m'), '')})"
@@ -1744,7 +1746,8 @@ class StokSistemi(QMainWindow):
                     if 0 <= fark_gun <= 30:
                         if kategori == "Et": son_30_et += takoz2_mik
                         else: son_30_tavuk += takoz2_mik
-                except: pass
+                except Exception as e:
+                    print(f"[TAKOZ2 HATA] barkod={barkod} tar={takoz2_tar!r} mik={takoz2_mik!r} → {e}")
             # Zayi analizi (tarihe göre, tüketime dahil edilmez — sadece zayi tablosunda)
             if zayi_mik > 0 and zayi_tar != "-":
                 try:
