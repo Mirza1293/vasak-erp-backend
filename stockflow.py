@@ -854,6 +854,7 @@ class StokSistemi(QMainWindow):
 
         self.aktif_filtreler = {}
         self.veri_klasoru = calisma_dizini_bul()
+        self.log_dosyasi = os.path.join(self.veri_klasoru, "stockflow.log")
         self.ilk_acilis = True
 
         ayarlar_yolu = os.path.join(self.veri_klasoru, "ayarlar.ini")
@@ -992,16 +993,110 @@ class StokSistemi(QMainWindow):
         self.ayarlar.sync()
         super().closeEvent(event)
 
+    def _log_yaz(self, tur, islem, detay=""):
+        zaman = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        satir = f"{zaman} | {tur} | {islem} | {detay}\n"
+        try:
+            with open(self.log_dosyasi, "a", encoding="utf-8") as f:
+                f.write(satir)
+        except Exception:
+            pass
+        try:
+            self.table_log.insertRow(0)
+            self.table_log.setItem(0, 0, QTableWidgetItem(zaman))
+            tur_item = QTableWidgetItem(tur)
+            tur_item.setForeground(QColor("#F38BA8") if tur == "Hata" else QColor("#A6E3A1"))
+            self.table_log.setItem(0, 1, tur_item)
+            self.table_log.setItem(0, 2, QTableWidgetItem(islem))
+            self.table_log.setItem(0, 3, QTableWidgetItem(detay))
+        except Exception:
+            pass
+
+    def _log_yukle(self):
+        if not os.path.exists(self.log_dosyasi):
+            return
+        try:
+            with open(self.log_dosyasi, "r", encoding="utf-8") as f:
+                satirlar = f.readlines()
+            self.table_log.setRowCount(0)
+            for satir in reversed(satirlar):
+                satir = satir.strip()
+                if not satir: continue
+                parcalar = satir.split(" | ", 3)
+                if len(parcalar) < 3: continue
+                r = self.table_log.rowCount()
+                self.table_log.insertRow(r)
+                self.table_log.setItem(r, 0, QTableWidgetItem(parcalar[0]))
+                tur = parcalar[1]
+                tur_item = QTableWidgetItem(tur)
+                tur_item.setForeground(QColor("#F38BA8") if tur == "Hata" else QColor("#A6E3A1"))
+                self.table_log.setItem(r, 1, tur_item)
+                self.table_log.setItem(r, 2, QTableWidgetItem(parcalar[2]))
+                self.table_log.setItem(r, 3, QTableWidgetItem(parcalar[3] if len(parcalar) > 3 else ""))
+        except Exception:
+            pass
+
+    def _log_filtrele(self, filtre):
+        if not os.path.exists(self.log_dosyasi):
+            return
+        try:
+            with open(self.log_dosyasi, "r", encoding="utf-8") as f:
+                satirlar = f.readlines()
+            self.table_log.setRowCount(0)
+            for satir in reversed(satirlar):
+                satir = satir.strip()
+                if not satir: continue
+                parcalar = satir.split(" | ", 3)
+                if len(parcalar) < 3: continue
+                tur = parcalar[1]
+                if filtre != "Tümü" and tur != filtre: continue
+                r = self.table_log.rowCount()
+                self.table_log.insertRow(r)
+                self.table_log.setItem(r, 0, QTableWidgetItem(parcalar[0]))
+                tur_item = QTableWidgetItem(tur)
+                tur_item.setForeground(QColor("#F38BA8") if tur == "Hata" else QColor("#A6E3A1"))
+                self.table_log.setItem(r, 1, tur_item)
+                self.table_log.setItem(r, 2, QTableWidgetItem(parcalar[2]))
+                self.table_log.setItem(r, 3, QTableWidgetItem(parcalar[3] if len(parcalar) > 3 else ""))
+        except Exception:
+            pass
+
+    def _eski_loglari_temizle(self):
+        if not os.path.exists(self.log_dosyasi):
+            QMessageBox.information(self, "Bilgi", "Log dosyası bulunamadı.")
+            return
+        try:
+            from datetime import timedelta
+            sinir = datetime.now() - timedelta(days=90)
+            with open(self.log_dosyasi, "r", encoding="utf-8") as f:
+                satirlar = f.readlines()
+            yeni = []
+            for satir in satirlar:
+                try:
+                    tarih_str = satir.split(" | ")[0].strip()
+                    tarih = datetime.strptime(tarih_str, "%d.%m.%Y %H:%M:%S")
+                    if tarih >= sinir:
+                        yeni.append(satir)
+                except Exception:
+                    yeni.append(satir)
+            with open(self.log_dosyasi, "w", encoding="utf-8") as f:
+                f.writelines(yeni)
+            self._log_yukle()
+            QMessageBox.information(self, "Temizlendi", f"{len(satirlar)-len(yeni)} eski log satırı silindi.")
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", str(e))
+
     def _sutun_genisliklerini_ayarla(self):
         for tbl in [self.table_et, self.table_tavuk]:
+            # Gizli sütunları sakla (13: _takoz2, 14: _transfer)
+            tbl.setColumnHidden(13, True)
+            tbl.setColumnHidden(14, True)
             tbl.resizeColumnsToContents()
             header = tbl.horizontalHeader()
-            # Header kendi fontunu kullanarak başlık genişliklerini hesapla
             hfm = header.fontMetrics()
             for i in range(tbl.columnCount()):
                 item = tbl.horizontalHeaderItem(i)
                 if item:
-                    # Her satır için en uzun metni hesapla
                     baslik_gen = hfm.horizontalAdvance(item.text()) + 30
                     if tbl.columnWidth(i) < baslik_gen:
                         tbl.setColumnWidth(i, baslik_gen)
@@ -1051,6 +1146,8 @@ class StokSistemi(QMainWindow):
         )
         # Kaydedilmiş font boyutunu uygula
         QTimer.singleShot(400, lambda: self.font_boyutu_degistir(0))
+        QTimer.singleShot(800, self._log_yukle)
+        self._log_yaz("İşlem", "Uygulama Açıldı", f"StockFlow başlatıldı")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1121,6 +1218,8 @@ class StokSistemi(QMainWindow):
         self.delete_btn.clicked.connect(self.urun_sil)
         self.add_btn = QPushButton("+ Yeni Kayıt")
         self.add_btn.clicked.connect(self.yeni_urun_penceresi_ac)
+        self.toplu_btn = QPushButton("📋 Toplu Giriş")
+        self.toplu_btn.clicked.connect(self.toplu_giris_ac)
         top_bar.addWidget(self.arama_kutusu)
         top_bar.addStretch()
         # Tema seçici
@@ -1135,6 +1234,7 @@ class StokSistemi(QMainWindow):
         top_bar.addWidget(self.excel_btn)
         top_bar.addWidget(self.delete_btn)
         top_bar.addWidget(self.add_btn)
+        top_bar.addWidget(self.toplu_btn)
         layout.addLayout(top_bar)
 
         self.tabs = QTabWidget()
@@ -1148,8 +1248,24 @@ class StokSistemi(QMainWindow):
         self.tabs.addTab(self.tab_tavuk, "🍗 Tavuk Kayıtları")
         self.tabs.addTab(self.tab_analiz, "📊 Analiz & Raporlar")
         self.tabs.addTab(self.tab_transfer, "🔄 Transfer")
+        # ── Yönetim sekmesi (Kısayollar + Kılavuz + Log)
+        self.tab_yonetim = QWidget()
+        self.tabs.addTab(self.tab_yonetim, "⚙️ Yönetim")
+        yonetim_layout = QVBoxLayout(self.tab_yonetim)
+        yonetim_layout.setContentsMargins(4, 4, 4, 4)
+        self.yonetim_tabs = QTabWidget()
+        self.yonetim_tabs.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #313244; border-radius: 8px; }
+            QTabBar::tab { background: #181825; color: #A6ADC8; padding: 8px 16px; border-radius: 6px; margin: 2px; }
+            QTabBar::tab:selected { background: #313244; color: #CDD6F4; font-weight: bold; }
+        """)
         self.tab_kisayollar = QWidget()
-        self.tabs.addTab(self.tab_kisayollar, "⌨️ Kısayollar")
+        self.tab_klavuz = QWidget()
+        self.tab_log = QWidget()
+        self.yonetim_tabs.addTab(self.tab_kisayollar, "⌨️ Kısayollar")
+        self.yonetim_tabs.addTab(self.tab_klavuz, "📖 Kullanım Kılavuzu")
+        self.yonetim_tabs.addTab(self.tab_log, "📋 Log Kayıtları")
+        yonetim_layout.addWidget(self.yonetim_tabs)
         layout.addWidget(self.tabs)
 
         dash_layout = QHBoxLayout(self.tab_dashboard)
@@ -1356,6 +1472,79 @@ class StokSistemi(QMainWindow):
                 if item:
                     item.setBackground(QColor("#24273A") if r % 2 == 0 else QColor("#1E1E2E"))
 
+        # ── KULLANIM KILAVUZU SEKMESİ ──
+        from PyQt6.QtWidgets import QScrollArea, QTextBrowser
+        klavuz_layout = QVBoxLayout(self.tab_klavuz)
+        klavuz_layout.setContentsMargins(8, 8, 8, 8)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        tb = QTextBrowser()
+        tb.setStyleSheet("QTextBrowser { background-color: #1E1E2E; color: #CDD6F4; border: none; border-radius: 12px; padding: 20px; font-size: 14px; }")
+        tb.setHtml("""
+        <h2 style='color:#FAB387;'>📖 StockFlow — Kullanım Kılavuzu</h2>
+        <hr style='border-color:#45475A;'/>
+        <h3 style='color:#A6E3A1;'>🏠 Ana Sayfa</h3>
+        <p>Et ve Tavuk stok durumunu özet kartlar halinde gösterir. Kalan miktar belirlediğiniz <b>eşik değerinin</b> altına düştüğünde kırmızı uyarı kartı çıkar. Eşik değerlerini sağ alttaki spinbox'lardan ayarlayabilirsiniz.</p>
+        <h3 style='color:#A6E3A1;'>🥩 Et / 🍗 Tavuk Kayıtları</h3>
+        <ul>
+        <li><b>Yeni Kayıt:</b> Ctrl+N veya "+ Yeni Kayıt" butonu. Barkod girilince kg otomatik hesaplanır.</li>
+        <li><b>Toplu Giriş:</b> "📋 Toplu Giriş" butonu — barkodları alt alta yapıştır, "Analiz Et" ile otomatik parse edilir.</li>
+        <li><b>Görsel Okuma:</b> Etiket fotoğrafından barkod veya Data Matrix otomatik okunur.</li>
+        <li><b>Hücre Düzenleme:</b> Tarih hücrelerine çift tıklayınca takvim açılır. Kg hücrelerinde sayısal giriş. Kalan otomatik hesaplanır.</li>
+        <li><b>Sağ Tık Menüsü:</b> Düzenle, Barkod Düzenle, Takoz 2. Kullanım, Kopyala, Transfer, Sil.</li>
+        <li><b>Sıralama:</b> Başlığa tıklayınca artan/azalan. Son sıralama hatırlanır.</li>
+        <li><b>Sütun Genişliği:</b> Sürükleyerek ayarlayın — kapanınca otomatik kaydedilir.</li>
+        </ul>
+        <h3 style='color:#A6E3A1;'>📦 Takoz 2. Kullanım</h3>
+        <p>Bir paketten takoz olarak alınan miktarın bir kısmı farklı bir günde kullanılacaksa: Sağ Tık → 📦 Takoz 2. Kullanım → Tarih ve miktar gir. Analiz tablosunda 1. günde <b>takoz - takoz2</b>, 2. günde <b>takoz2</b> görünür.</p>
+        <h3 style='color:#A6E3A1;'>🔍 Hızlı Arama (Alt+F)</h3>
+        <p>Float pencere açılır. Barkod numarası veya kg değeri yazın. Kg ile arama yapınca aynı gramajdaki tüm ürünler listelenir. Çift tıklayınca ilgili sekmeye geçip o satıra atlanır.</p>
+        <h3 style='color:#A6E3A1;'>📊 Analiz & Raporlar</h3>
+        <ul>
+        <li><b>Tüketim Analizi:</b> Günlük/Haftalık/Aylık et-tavuk tüketimi + paket dağılımı sütunu.</li>
+        <li><b>Gelen Ürün Analizi:</b> Geliş tarihine göre kg kategorisi dökümü.</li>
+        <li><b>Stok Özeti:</b> Toplam giren/kalan/tüketilen/zayi + kalan paket dağılımı.</li>
+        <li><b>Paket Raporu:</b> Günlük/Haftalık/Aylık kullanılan paket sayıları (6kgx2 formatında).</li>
+        <li>Tüm analiz sütunları içeriğe göre otomatik genişler.</li>
+        </ul>
+        <h3 style='color:#A6E3A1;'>📄 Excel Export</h3>
+        <p>Ctrl+X veya "Tüm Analizleri Excel'e Aktar" — Et, Tavuk ve tüm analiz sekmeleri + Paket Raporu tek Excel dosyasına aktarılır.</p>
+        <h3 style='color:#A6E3A1;'>⚙️ İpuçları</h3>
+        <ul>
+        <li>Ctrl+Scroll ile tüm tablo yazı boyutunu büyütün/küçültün.</li>
+        <li>Etiket fotoğrafı bulanık veya parlak olsa bile kontrast artırma ile barkod okunmaya çalışılır.</li>
+        <li>Log Kayıtları sekmesinden tüm işlem ve hata geçmişini görebilirsiniz.</li>
+        </ul>
+        """)
+        scroll.setWidget(tb)
+        klavuz_layout.addWidget(scroll)
+
+        # ── LOG SEKMESİ ──
+        log_layout = QVBoxLayout(self.tab_log)
+        log_layout.setContentsMargins(8, 8, 8, 8)
+        log_ust = QHBoxLayout()
+        lbl_log = QLabel("📋 Log Kayıtları")
+        lbl_log.setStyleSheet("color:#FAB387; font-weight:bold; font-size:14px;")
+        log_ust.addWidget(lbl_log)
+        log_ust.addStretch()
+        self.log_filtre = QComboBox()
+        self.log_filtre.addItems(["Tümü", "İşlem", "Hata"])
+        self.log_filtre.setStyleSheet("background:#313244; color:#CDD6F4; border-radius:6px; padding:4px 8px;")
+        self.log_filtre.setFixedWidth(100)
+        self.log_filtre.currentTextChanged.connect(self._log_filtrele)
+        log_ust.addWidget(self.log_filtre)
+        btn_log_temizle = QPushButton("🗑 90 Günden Eskiyi Sil")
+        btn_log_temizle.setStyleSheet("background:#3a1e1e; color:#F38BA8; border-radius:6px; padding:4px 12px; font-size:12px;")
+        btn_log_temizle.clicked.connect(self._eski_loglari_temizle)
+        log_ust.addWidget(btn_log_temizle)
+        log_layout.addLayout(log_ust)
+        self.table_log = self._analiz_tablosu(["Tarih/Saat", "Tür", "İşlem", "Detay"])
+        self.table_log.setColumnWidth(0, 150)
+        self.table_log.setColumnWidth(1, 70)
+        self.table_log.setColumnWidth(2, 160)
+        log_layout.addWidget(self.table_log)
+
         alt_bar = QHBoxLayout()
         self.lbl_secim_bilgi = QLabel("📊 Seçili Hücre: 0 | Toplam Değer: 0,00")
         self.lbl_secim_bilgi.setObjectName("lbl_secim")
@@ -1388,6 +1577,8 @@ class StokSistemi(QMainWindow):
             ("F5", self.verileri_yukle),                                # Yenile
             ("Ctrl+B", self.excelden_iceri_aktar),                      # Excel'den al
             ("Ctrl+X", self.excel_disa_aktar),                         # Excel'e aktar
+            ("Alt+F", self.hizli_arama_ac),                            # Hızlı Arama
+            ("Ctrl+T", self.toplu_giris_ac),                           # Toplu Giriş
         ]
         for kisayol, fonksiyon in kisayollar:
             sc = QShortcut(QKeySequence(kisayol), self)
@@ -1404,7 +1595,7 @@ class StokSistemi(QMainWindow):
     def tablo_olustur(self):
         table = GelistirilmisTablo(self)
         table.setColumnCount(13)
-        self.basliklar = ["Barkod", "Geliş\nT.", "Kullanım\nT.", "Küvet T.\n(Tekrar)", "Küvet\n(DÜŞ)", "Takoz T.\n(Tekrar)", "Takoz\n(DÜŞ)", "İlk\nMiktar", "Kalan\nMiktar", "Tüketim\n(%)", "Zayi\n(kg)", "Zayi\nT.", "ID"]
+        self.basliklar = ["Barkod", "Geliş\nT.", "Kullanım\nT.", "Küvet T.\n(Tekrar)", "Küvet\n(DÜŞ)", "Takoz T.\n(Tekrar)", "Takoz\n(DÜŞ)", "İlk\nMiktar", "Kalan\nMiktar", "Tüketim\n(%)", "Zayi\n(kg)", "Zayi\nT.", "ID", "_takoz2", "_transfer"]
         table.setHorizontalHeaderLabels(self.basliklar)
         table.setFont(QFont("Arial", 12))
         table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed)
@@ -1470,6 +1661,8 @@ class StokSistemi(QMainWindow):
         for tablo in [self.table_et, self.table_tavuk]:
             for i, baslik in enumerate(self.basliklar):
                 item = tablo.horizontalHeaderItem(i)
+                if item is None:
+                    continue
                 if i in self.aktif_filtreler:
                     item.setText(baslik + " 🔽")
                     item.setForeground(QColor("#A6E3A1"))
@@ -1524,6 +1717,7 @@ class StokSistemi(QMainWindow):
     # ── VERİ YÜKLEME (API'den) ──
     def _baglanti_hatasi(self, hata):
         self.lbl_durum.setText(f"❌ {hata}")
+        self._log_yaz("Hata", "Bağlantı Hatası", str(hata)[:200])
         # Yerel yedekten yükle
         yedek = self._yerel_yedekten_yukle()
         if yedek:
@@ -1632,7 +1826,8 @@ class StokSistemi(QMainWindow):
                             self.paket_genel_veri[_gpk].get(f"{kategori}_kalan_adet", 0) + 1
                 except ValueError: pass
 
-            # İlk kullanım tüketimi (küvet ve takoz hariç)
+            # İlk kullanım tüketimi: ilk - kalan - kuvet - takoz - takoz2 - zayi - transfer
+            # Kalan doğru hesaplandıysa bu sadece "ilk kullanım tarihi"ndeki tüketimi verir
             ilk_kullanim_mik = max(0.0, ilk_mik - kalan_mik - kuvet_mik - takoz_mik - takoz2_mik - zayi_mik - transfer_mik)
             if ilk_kullanim_mik > 0 and kullanim != "-":
                 try:
@@ -1704,6 +1899,8 @@ class StokSistemi(QMainWindow):
                         else: son_30_tavuk += kuvet_mik
                 except: pass
             # Takoz tüketimi analizi
+            # Takoz2 varsa: takoz tarihine (takoz_mik - takoz2_mik) ekle (o gün kullanılan kısım)
+            # Takoz2 yoksa: takoz_mik'in tamamı o güne ait
             if takoz_mik > 0 and takoz_tar != "-":
                 try:
                     t_obj = None
@@ -1714,25 +1911,27 @@ class StokSistemi(QMainWindow):
                     gun_str = t_obj.strftime('%d.%m.%Y')
                     hafta_str = f"{t_obj.strftime('%Y')} - {t_obj.strftime('%W')}. Hafta"
                     ay_str = f"{t_obj.strftime('%Y')} - {t_obj.strftime('%m')} ({self.aylar.get(t_obj.strftime('%m'), '')})"
-                    self.gunluk_veri[gun_str][kategori] += takoz_mik
-                    self.haftalik_veri[hafta_str][kategori] += takoz_mik
-                    self.aylik_veri[ay_str][kategori] += takoz_mik
+                    # Takoz2 varsa o günde sadece fark kullanıldı
+                    takoz_gun_mik = max(0.0, takoz_mik - takoz2_mik)
+                    self.gunluk_veri[gun_str][kategori] += takoz_gun_mik
+                    self.haftalik_veri[hafta_str][kategori] += takoz_gun_mik
+                    self.aylik_veri[ay_str][kategori] += takoz_gun_mik
                     fark_gun = (bugun - t_obj).days
                     if 0 <= fark_gun <= 7:
-                        if kategori == "Et": son_7_et += takoz_mik
-                        else: son_7_tavuk += takoz_mik
+                        if kategori == "Et": son_7_et += takoz_gun_mik
+                        else: son_7_tavuk += takoz_gun_mik
                     if 0 <= fark_gun <= 30:
-                        if kategori == "Et": son_30_et += takoz_mik
-                        else: son_30_tavuk += takoz_mik
+                        if kategori == "Et": son_30_et += takoz_gun_mik
+                        else: son_30_tavuk += takoz_gun_mik
                 except: pass
-            # Takoz 2. kullanım analizi
-            if takoz2_mik and takoz2_mik > 0 and takoz2_tar and takoz2_tar != "-":
+            # Takoz 2. kullanım analizi — takozun kalan kısmı başka bir günde kullanıldı
+            if takoz2_mik > 0 and takoz2_tar and takoz2_tar != "-":
                 try:
                     t_obj = None
                     for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
                         try: t_obj = datetime.strptime(takoz2_tar, fmt); break
                         except: pass
-                    if not t_obj: raise ValueError(f"Tarih parse hatası: {takoz2_tar!r}")
+                    if not t_obj: raise ValueError()
                     gun_str = t_obj.strftime('%d.%m.%Y')
                     hafta_str = f"{t_obj.strftime('%Y')} - {t_obj.strftime('%W')}. Hafta"
                     ay_str = f"{t_obj.strftime('%Y')} - {t_obj.strftime('%m')} ({self.aylar.get(t_obj.strftime('%m'), '')})"
@@ -1746,8 +1945,7 @@ class StokSistemi(QMainWindow):
                     if 0 <= fark_gun <= 30:
                         if kategori == "Et": son_30_et += takoz2_mik
                         else: son_30_tavuk += takoz2_mik
-                except Exception as e:
-                    print(f"[TAKOZ2 HATA] barkod={barkod} tar={takoz2_tar!r} mik={takoz2_mik!r} → {e}")
+                except: pass
             # Zayi analizi (tarihe göre, tüketime dahil edilmez — sadece zayi tablosunda)
             if zayi_mik > 0 and zayi_tar != "-":
                 try:
@@ -1800,6 +1998,9 @@ class StokSistemi(QMainWindow):
             # Transfer
             id_item = SiralanabilirItem(str(_id), _id)
             hedef_tablo.setItem(row_idx, 12, id_item)
+            # Gizli sütunlar: takoz2 ve transfer (hızlı kalan hesabı için)
+            hedef_tablo.setItem(row_idx, 13, QTableWidgetItem(str(takoz2_mik)))
+            hedef_tablo.setItem(row_idx, 14, QTableWidgetItem(str(transfer_mik)))
 
             for col in range(13):
                 item = hedef_tablo.item(row_idx, col)
@@ -2000,19 +2201,20 @@ class StokSistemi(QMainWindow):
             try:
                 t2_tar = tar_edit.date().toString("dd.MM.yyyy")
                 t2_mik = mik_spin.value()
-                kuvet = u.get("kuvet_miktar", 0) or 0
-                takoz = u.get("takoz_miktar", 0) or 0
-                zayi  = u.get("zayi_miktar", 0) or 0
-                transfer = u.get("transfer_miktar", 0) or 0
-                yeni_kalan = max(0.0, ilk - kuvet - takoz - t2_mik - zayi - transfer)
+                eski_t2_mik = float(u.get("takoz2_miktar", 0) or 0)
+                # Kalan: takoz2 değişince sadece fark kadar kalan güncellenir
+                yeni_kalan = max(0.0, kalan - (t2_mik - eski_t2_mik))
+                # takoz_miktar değişmez — analiz katmanında takoz_gun_mik = takoz - takoz2 hesaplanır
                 self.api.urun_guncelle(urun_id, {
                     "takoz2_kullanim_tarihi": t2_tar,
                     "takoz2_miktar": t2_mik,
                     "kalan_miktar": yeni_kalan
                 })
+                self._log_yaz("İşlem", "Takoz 2. Kullanım", f"Barkod: {barkod} | Tarih: {t2_tar} | Miktar: {t2_mik:.3f} kg")
                 self.verileri_yukle()
                 dlg.accept()
             except Exception as e:
+                self._log_yaz("Hata", "Takoz 2 Kayıt Hatası", str(e)[:200])
                 QMessageBox.critical(dlg, "Hata", str(e))
 
         def _temizle():
@@ -2021,19 +2223,18 @@ class StokSistemi(QMainWindow):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if cevap == QMessageBox.StandardButton.Yes:
                 try:
-                    kuvet = u.get("kuvet_miktar", 0) or 0
-                    takoz = u.get("takoz_miktar", 0) or 0
-                    zayi  = u.get("zayi_miktar", 0) or 0
-                    transfer = u.get("transfer_miktar", 0) or 0
-                    yeni_kalan = max(0.0, ilk - kuvet - takoz - zayi - transfer)
+                    eski_t2_mik = float(u.get("takoz2_miktar", 0) or 0)
+                    yeni_kalan = kalan + eski_t2_mik
                     self.api.urun_guncelle(urun_id, {
                         "takoz2_kullanim_tarihi": "-",
                         "takoz2_miktar": 0.0,
                         "kalan_miktar": yeni_kalan
                     })
+                    self._log_yaz("İşlem", "Takoz 2 Temizlendi", f"Barkod: {barkod}")
                     self.verileri_yukle()
                     dlg.accept()
                 except Exception as e:
+                    self._log_yaz("Hata", "Takoz 2 Temizle Hatası", str(e)[:200])
                     QMessageBox.critical(dlg, "Hata", str(e))
 
         btn_kaydet.clicked.connect(_kaydet)
@@ -2093,6 +2294,10 @@ class StokSistemi(QMainWindow):
             except: w.setValue(0)
             return w
 
+        ilk_mik_val = float(u.get("ilk_miktar", 0) or 0)
+        takoz2_mik_val = float(u.get("takoz2_miktar", 0) or 0)
+        transfer_mik_val = float(u.get("transfer_miktar", 0) or 0)
+
         f_kul = tarih_widget(u.get("kullanim_tarihi", "-"))
         f_kuvet_tar = tarih_widget(u.get("kuvet_kullanim_tarihi", "-"))
         f_kuvet_kg = kg_widget(u.get("kuvet_miktar", 0))
@@ -2100,6 +2305,23 @@ class StokSistemi(QMainWindow):
         f_takoz_kg = kg_widget(u.get("takoz_miktar", 0))
         f_zayi_kg = kg_widget(u.get("zayi_miktar", 0))
         f_kalan = kg_widget(u.get("kalan_miktar", 0))
+        f_kalan.setReadOnly(True)
+        f_kalan.setStyleSheet(ortak + "color: #A6E3A1;")
+
+        def _kalan_guncelle():
+            kuvet = f_kuvet_kg.value()
+            takoz = f_takoz_kg.value()
+            zayi = f_zayi_kg.value()
+            # ilk kullanım miktarı = kalan üzerinden değil, direkt hesap
+            # toplam çıkış = kuvet + takoz + takoz2 + zayi + transfer
+            toplam_cikis = kuvet + takoz + takoz2_mik_val + zayi + transfer_mik_val
+            yeni_kalan = max(0.0, ilk_mik_val - toplam_cikis)
+            # ilk kullanım miktarı bilinmiyorsa (kullanım tarihi varsa) onu da düş
+            f_kalan.setValue(yeni_kalan)
+
+        f_kuvet_kg.valueChanged.connect(_kalan_guncelle)
+        f_takoz_kg.valueChanged.connect(_kalan_guncelle)
+        f_zayi_kg.valueChanged.connect(_kalan_guncelle)
 
         form.addRow("Kullanım Tarihi:", f_kul)
         form.addRow("Küvet Tarihi:", f_kuvet_tar)
@@ -2107,7 +2329,7 @@ class StokSistemi(QMainWindow):
         form.addRow("Takoz Tarihi:", f_takoz_tar)
         form.addRow("Takoz (kg):", f_takoz_kg)
         form.addRow("Zayi (kg):", f_zayi_kg)
-        form.addRow("Kalan (kg):", f_kalan)
+        form.addRow("Kalan (kg) 🔒:", f_kalan)
 
         layout.addLayout(form)
 
@@ -2134,6 +2356,8 @@ class StokSistemi(QMainWindow):
                     "kalan_miktar": f_kalan.value(),
                 }
                 self.api.urun_guncelle(urun_id, guncelleme)
+                barkod_log = u.get("barkod", "?")
+                self._log_yaz("İşlem", "Kayıt Düzenlendi", f"Barkod: {barkod_log} | Küvet: {f_kuvet_kg.value():.3f} kg | Takoz: {f_takoz_kg.value():.3f} kg | Kalan: {f_kalan.value():.3f} kg")
                 self.verileri_yukle()
             except Exception as e:
                 QMessageBox.critical(self, "Hata", str(e))
@@ -2538,7 +2762,10 @@ class StokSistemi(QMainWindow):
                 kuvet = float(str(tablo.item(satir, 4).text()).replace("kg", "").replace(",", ".").strip()) if sutun != 4  else yeni_deger
                 takoz = float(str(tablo.item(satir, 6).text()).replace("kg", "").replace(",", ".").strip()) if sutun != 6  else yeni_deger
                 zayi  = float(str(tablo.item(satir, 10).text()).replace("kg", "").replace(",", ".").strip()) if sutun != 10 else yeni_deger
-                kalan = max(0.0, ilk - kuvet - takoz - zayi)
+                # Gizli sütunlardan takoz2 ve transfer oku (API çağrısı yok)
+                takoz2_v   = float(str(tablo.item(satir, 13).text()).replace(",", ".")) if tablo.item(satir, 13) else 0.0
+                transfer_v = float(str(tablo.item(satir, 14).text()).replace(",", ".")) if tablo.item(satir, 14) else 0.0
+                kalan = max(0.0, ilk - kuvet - takoz - takoz2_v - zayi - transfer_v)
                 guncelleme["kalan_miktar"] = kalan
             except: pass
 
@@ -2559,6 +2786,180 @@ class StokSistemi(QMainWindow):
             self.hizli_hucre_guncelle(item.row(), sutun, item.text())
         tablo.blockSignals(False)
         self.verileri_yukle()
+
+    def toplu_giris_ac(self):
+        idx = self.tabs.currentIndex()
+        varsayilan_kat = "Et" if idx == 1 else "Tavuk" if idx == 2 else "Et"
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, QComboBox, QDateEdit, QTextEdit, QSplitter
+        dlg = QDialog(self)
+        dlg.setWindowTitle("📋 Toplu Giriş")
+        dlg.resize(900, 580)
+        dlg.setStyleSheet(self.styleSheet())
+        lay = QVBoxLayout(dlg)
+        lay.setSpacing(8)
+        ortak = "background-color: #1E1E2E; color: #CDD6F4; border: 2px solid #313244; border-radius: 6px; padding: 4px;"
+        ust = QHBoxLayout()
+        lbl_kat = QLabel("Kategori:"); lbl_kat.setStyleSheet("color:#A6ADC8;")
+        kat_combo = QComboBox(); kat_combo.addItems(["Et", "Tavuk"]); kat_combo.setCurrentText(varsayilan_kat)
+        kat_combo.setStyleSheet(ortak); kat_combo.setFixedWidth(110)
+        lbl_tar = QLabel("Geliş Tarihi:"); lbl_tar.setStyleSheet("color:#A6ADC8;")
+        gelis_tar = QDateEdit(); gelis_tar.setCalendarPopup(True); gelis_tar.setDate(QDate.currentDate())
+        gelis_tar.setStyleSheet(ortak); gelis_tar.setFixedWidth(130)
+        ust.addWidget(lbl_kat); ust.addWidget(kat_combo); ust.addSpacing(20)
+        ust.addWidget(lbl_tar); ust.addWidget(gelis_tar); ust.addStretch()
+        lay.addLayout(ust)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        sol = QWidget(); sol_lay = QVBoxLayout(sol); sol_lay.setContentsMargins(0,0,4,0)
+        lbl_sol = QLabel("📋 Barkodları buraya yapıştırın (alt alta):")
+        lbl_sol.setStyleSheet("color:#FAB387; font-weight:bold; font-size:13px;")
+        sol_lay.addWidget(lbl_sol)
+        txt = QTextEdit()
+        txt.setPlaceholderText("9924630030715260519092242\n9924630030715260519092243\n...")
+        txt.setStyleSheet("background:#181825; color:#CDD6F4; border:2px solid #FAB387; border-radius:8px; padding:8px; font-family:Courier New; font-size:13px;")
+        sol_lay.addWidget(txt)
+        btn_parse = QPushButton("▶  Analiz Et")
+        btn_parse.setStyleSheet("background:#FAB387; color:#11111B; border-radius:8px; padding:10px; font-weight:bold; font-size:13px;")
+        sol_lay.addWidget(btn_parse); splitter.addWidget(sol)
+        sag = QWidget(); sag_lay = QVBoxLayout(sag); sag_lay.setContentsMargins(4,0,0,0)
+        lbl_sag = QLabel("🔍 Önizleme — kg değerlerini düzenleyebilirsiniz:")
+        lbl_sag.setStyleSheet("color:#A6E3A1; font-weight:bold; font-size:13px;")
+        sag_lay.addWidget(lbl_sag)
+        tablo = QTableWidget(0, 2); tablo.setHorizontalHeaderLabels(["Barkod", "İlk Miktar (kg)"])
+        tablo.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        tablo.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        tablo.setColumnWidth(1, 150)
+        tablo.setStyleSheet("QTableWidget { background-color:#1E1E2E; color:#CDD6F4; border:1px solid #313244; border-radius:8px; } QHeaderView::section { background-color:#181825; color:#FAB387; padding:6px; border:none; font-weight:bold; }")
+        sag_lay.addWidget(tablo); splitter.addWidget(sag); splitter.setSizes([380, 480])
+        lay.addWidget(splitter)
+        def _barkoddan_kg(b):
+            try:
+                if len(b) >= 13:
+                    kg = float(f"{b[8:10]}.{b[10:12]}")
+                    if int(b[12]) > 5: kg += 0.01
+                    return round(kg, 3)
+            except: pass
+            return 0.0
+        def _parse():
+            tablo.blockSignals(True); tablo.setRowCount(0)
+            for barkod in [s.strip() for s in txt.toPlainText().splitlines() if s.strip()]:
+                temiz = ''.join(c for c in barkod if c.isdigit())
+                if not temiz: continue
+                kg = _barkoddan_kg(temiz); r = tablo.rowCount(); tablo.insertRow(r)
+                tablo.setItem(r, 0, QTableWidgetItem(temiz))
+                tablo.setItem(r, 1, QTableWidgetItem(f"{kg:.3f}".replace(".", ",")))
+            lbl_sag.setText(f"🔍 Önizleme — {tablo.rowCount()} barkod — kg değerlerini düzenleyebilirsiniz:")
+            tablo.blockSignals(False)
+        btn_parse.clicked.connect(_parse)
+        alt = QHBoxLayout()
+        btn_iptal = QPushButton("İptal"); btn_iptal.setStyleSheet("background:#313244; color:#CDD6F4; border-radius:8px; padding:8px 16px;")
+        btn_iptal.clicked.connect(dlg.reject)
+        btn_kaydet = QPushButton("💾 Tümünü Kaydet")
+        btn_kaydet.setStyleSheet("background:#A6E3A1; color:#11111B; border-radius:8px; padding:8px 20px; font-weight:bold;")
+        def _kaydet():
+            if tablo.rowCount() == 0:
+                QMessageBox.warning(dlg, "Uyarı", "Önce barkodları yapıştırıp 'Analiz Et' butonuna tıklayın."); return
+            kategori = kat_combo.currentText(); gelis = gelis_tar.date().toString("dd.MM.yyyy")
+            basarili = hatali = 0; hatalar = []
+            for r in range(tablo.rowCount()):
+                b_item = tablo.item(r, 0); kg_item = tablo.item(r, 1)
+                barkod = b_item.text().strip() if b_item else ""
+                if not barkod: continue
+                try: ilk_mik = float((kg_item.text() if kg_item else "0").replace(",", ".").replace("kg", "").strip())
+                except: ilk_mik = 0.0
+                try:
+                    self.api.urun_ekle({"barkod": barkod, "kategori": kategori, "gelis_tarihi": gelis,
+                                        "kullanim_tarihi": "-", "tekrar_kullanim_tarihi": "-",
+                                        "ilk_miktar": ilk_mik, "kalan_miktar": ilk_mik})
+                    basarili += 1
+                    b_item.setBackground(QColor("#1e3a2f"))
+                    self._log_yaz("İşlem", "Toplu Giriş - Eklendi", f"Barkod: {barkod} | {kategori} | {gelis} | {ilk_mik:.3f} kg")
+                except Exception as e:
+                    hatali += 1; b_item.setBackground(QColor("#3a1e1e"))
+                    hatalar.append(f"Satır {r+1} ({barkod}): {str(e)[:60]}")
+                    self._log_yaz("Hata", "Toplu Giriş - Hata", f"Barkod: {barkod} | {str(e)[:100]}")
+            ozet = f"✅ {basarili} kayıt eklendi."
+            if hatali: ozet += f"\n❌ {hatali} hatalı:\n" + "\n".join(hatalar)
+            QMessageBox.information(dlg, "Sonuç", ozet); self.verileri_yukle()
+            if hatali == 0: dlg.accept()
+        btn_kaydet.clicked.connect(_kaydet)
+        alt.addStretch(); alt.addWidget(btn_iptal); alt.addWidget(btn_kaydet)
+        lay.addLayout(alt); dlg.exec()
+
+    def hizli_arama_ac(self):
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QLabel
+        dlg = QDialog(self)
+        dlg.setWindowTitle("🔍 Hızlı Arama")
+        dlg.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        dlg.resize(520, 380); dlg.setStyleSheet(self.styleSheet())
+        lay = QVBoxLayout(dlg); lay.setSpacing(8)
+        lbl = QLabel("Barkod numarası veya kg değeri girin:")
+        lbl.setStyleSheet("color: #A6ADC8; font-size: 13px;"); lay.addWidget(lbl)
+        inp = QLineEdit(); inp.setPlaceholderText("Örn: 99246... veya 30.71")
+        inp.setStyleSheet("background:#313244; color:#CDD6F4; border:2px solid #FAB387; border-radius:8px; padding:8px; font-size:14px;")
+        lay.addWidget(inp)
+        sonuc_lbl = QLabel(""); sonuc_lbl.setStyleSheet("color:#A6ADC8; font-size:12px;"); lay.addWidget(sonuc_lbl)
+        liste = QListWidget()
+        liste.setStyleSheet("QListWidget { background:#1E1E2E; color:#CDD6F4; border:1px solid #45475A; border-radius:8px; font-size:13px; } QListWidget::item { padding:8px; border-bottom:1px solid #313244; } QListWidget::item:selected { background:#45475A; } QListWidget::item:hover { background:#313244; }")
+        lay.addWidget(liste)
+        def _sutun_idx(tablo, baslik):
+            for c in range(tablo.columnCount()):
+                h = tablo.horizontalHeaderItem(c)
+                if h and baslik in h.text(): return c
+            return -1
+        def _tum_kayitlar():
+            kayitlar = []
+            for tablo, sekme_idx, kat in [(self.table_et, 1, "Et"), (self.table_tavuk, 2, "Tavuk")]:
+                col_b = _sutun_idx(tablo, "Barkod") or 0
+                col_i = _sutun_idx(tablo, "İlk") ; col_i = col_i if col_i >= 0 else 7
+                col_k = _sutun_idx(tablo, "Kalan"); col_k = col_k if col_k >= 0 else 8
+                for r in range(tablo.rowCount()):
+                    b = tablo.item(r, col_b)
+                    if not b: continue
+                    try: ilk = float(tablo.item(r, col_i).text().replace("kg","").replace(",",".").strip()) if tablo.item(r, col_i) else 0
+                    except: ilk = 0
+                    try: kalan = float(tablo.item(r, col_k).text().replace("kg","").replace(",",".").strip()) if tablo.item(r, col_k) else 0
+                    except: kalan = 0
+                    kayitlar.append({"barkod": b.text(), "ilk": ilk, "kalan": kalan, "sekme": sekme_idx, "satir": r, "kat": kat})
+            return kayitlar
+        kayitlar = _tum_kayitlar()
+        def _ara(metin):
+            liste.clear(); metin = metin.strip()
+            if len(metin) < 2: sonuc_lbl.setText(""); return
+            # Virgül veya nokta içeriyorsa kg araması, sadece rakamsa barkod araması
+            metin_nokta = metin.replace(",", ".")
+            kg_mod = False; kg_ara = None
+            try:
+                kg_ara = float(metin_nokta)
+                # En az bir nokta/virgül varsa kesinlikle kg, yoksa barkod olabilir
+                if "," in metin or "." in metin:
+                    kg_mod = True
+            except:
+                pass
+            if kg_mod:
+                # Tam eşleşme — girilen rakamlarla başlayan ilk miktar
+                metin_rakam = metin.replace(",", "").replace(".", "")
+                sonuclar = []
+                for k in kayitlar:
+                    ilk_str = f"{k['ilk']:.3f}".replace(".", "")  # "40280"
+                    if ilk_str.startswith(metin_rakam):
+                        sonuclar.append(k)
+            else:
+                sonuclar = [k for k in kayitlar if metin in k["barkod"]]
+            sonuc_lbl.setText(f"{len(sonuclar)} sonuç")
+            for k in sonuclar:
+                etiket = f"[{k['kat']}]  {k['barkod']}  |  İlk: {k['ilk']:.3f} kg  |  Kalan: {k['kalan']:.3f} kg".replace(".", ",")
+                item = QListWidgetItem(etiket); item.setData(Qt.ItemDataRole.UserRole, k)
+                item.setForeground(QColor("#F38BA8") if k["kat"] == "Et" else QColor("#F9E2AF"))
+                liste.addItem(item)
+        def _sec(item):
+            k = item.data(Qt.ItemDataRole.UserRole)
+            self.tabs.setCurrentIndex(k["sekme"])
+            tablo = self.table_et if k["sekme"] == 1 else self.table_tavuk
+            tablo.scrollToItem(tablo.item(k["satir"], 0)); tablo.selectRow(k["satir"]); dlg.close()
+        inp.textChanged.connect(_ara); liste.itemDoubleClicked.connect(_sec)
+        # Dialog göründükten sonra odak ver
+        QTimer.singleShot(100, inp.setFocus)
+        dlg.exec()
 
     def yeni_urun_penceresi_ac(self):
         # Aktif sekmeye göre kategori belirle
@@ -2581,8 +2982,10 @@ class StokSistemi(QMainWindow):
                         "tekrar_kullanim_tarihi": tekrar,
                         "ilk_miktar": ilk_mik, "kalan_miktar": kalan_mik
                     })
+                    self._log_yaz("İşlem", "Kayıt Eklendi", f"Barkod: {barkod} | Kategori: {kategori} | İlk: {ilk_mik:.3f} kg")
                     self.verileri_yukle()
                 except Exception as e:
+                    self._log_yaz("Hata", "Kayıt Ekleme Hatası", str(e)[:200])
                     if "kayıtlı" in str(e) or "409" in str(e):
                         QMessageBox.warning(self, "Hata", "Bu barkod numarası zaten sistemde kayıtlı!")
                     else:
@@ -2598,7 +3001,10 @@ class StokSistemi(QMainWindow):
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if cevap == QMessageBox.StandardButton.Yes:
             for i in satir_indeksleri:
-                self.api.urun_sil(int(tablo.item(i, 12).text()))
+                urun_id = int(tablo.item(i, 12).text())
+                barkod = tablo.item(i, 0).text() if tablo.item(i, 0) else "?"
+                self.api.urun_sil(urun_id)
+                self._log_yaz("İşlem", "Kayıt Silindi", f"Barkod: {barkod} | ID: {urun_id}")
             self.verileri_yukle()
 
     def tarih_formatla(self, val):
@@ -2617,16 +3023,43 @@ class StokSistemi(QMainWindow):
             try:
                 veriler = self.api.urunleri_getir()
                 wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = "Stok Verileri"
-                ws.append(["ID", "Barkod", "Kategori", "Geliş T.", "Kullanım T.", "Tekrar Kullanım", "İlk Miktar", "Harcanan", "Kalan Miktar"])
-                for u in veriler:
-                    ws.append([u["id"], u["barkod"], u["kategori"], u["gelis_tarihi"],
-                                u.get("kullanim_tarihi", "-"), u.get("tekrar_kullanim_tarihi", "-"),
-                                u["ilk_miktar"], u.get("tekrar_miktar", 0), u["kalan_miktar"]])
+
+                def _tablo_satirlari(kat_filtre):
+                    satirlar = []
+                    for u in veriler:
+                        if u.get("kategori") != kat_filtre: continue
+                        satirlar.append([
+                            u["id"], u["barkod"], u["kategori"], u["gelis_tarihi"],
+                            u.get("kullanim_tarihi", "-"),
+                            u.get("kuvet_kullanim_tarihi", "-"), u.get("kuvet_miktar", 0),
+                            u.get("takoz_kullanim_tarihi", "-"), u.get("takoz_miktar", 0),
+                            u.get("takoz2_kullanim_tarihi", "-"), u.get("takoz2_miktar", 0),
+                            u["ilk_miktar"], u["kalan_miktar"],
+                            u.get("zayi_miktar", 0), u.get("zayi_tarihi", "-"),
+                            u.get("transfer_miktar", 0), u.get("transfer_tarihi", "-"),
+                            u.get("transfer_yon", "-"), u.get("transfer_isletme", "-")
+                        ])
+                    return satirlar
+
+                basliklar = ["ID", "Barkod", "Kategori", "Geliş T.", "Kullanım T.",
+                             "Küvet T.", "Küvet (kg)", "Takoz T.", "Takoz (kg)",
+                             "Takoz2 T.", "Takoz2 (kg)", "İlk Miktar", "Kalan Miktar",
+                             "Zayi (kg)", "Zayi T.", "Transfer (kg)", "Transfer T.",
+                             "Transfer Yön", "Transfer İşletme"]
+
+                ws_et = wb.active; ws_et.title = "Et Kayıtları"
+                ws_et.append(basliklar)
+                for satir in _tablo_satirlari("Et"): ws_et.append(satir)
+
+                ws_tv = wb.create_sheet("Tavuk Kayıtları")
+                ws_tv.append(basliklar)
+                for satir in _tablo_satirlari("Tavuk"): ws_tv.append(satir)
+
                 wb.save(dosya_yolu)
+                self._log_yaz("İşlem", "Excel Export", f"Stok verileri dışa aktarıldı: {dosya_yolu.split('/')[-1]}")
                 QMessageBox.information(self, "Başarılı", "Excel dosyası oluşturuldu!")
             except Exception as e:
+                self._log_yaz("Hata", "Excel Export Hatası", str(e)[:200])
                 QMessageBox.critical(self, "Hata", str(e))
 
     def analiz_raporu_disa_aktar(self):
@@ -2681,6 +3114,7 @@ class StokSistemi(QMainWindow):
                             basarili += 1
                         except: hatali += 1
                 self.verileri_yukle()
+                self._log_yaz("İşlem", "Excel Import", f"{basarili} kayıt eklendi, {hatali} hatalı")
                 QMessageBox.information(self, "Sonuç", f"Eklendi: {basarili}\nAtlanan: {hatali}")
             except Exception as e:
                 QMessageBox.critical(self, "Hata", str(e))
