@@ -1958,6 +1958,8 @@ class StokSistemi(QMainWindow):
 
         et_giren, et_kalan, tavuk_giren, tavuk_kalan = 0.0, 0.0, 0.0, 0.0
         son_7_et, son_7_tavuk, son_30_et, son_30_tavuk = 0.0, 0.0, 0.0, 0.0
+        son_7_et_gunler, son_7_tavuk_gunler = set(), set()
+        son_30_et_gunler, son_30_tavuk_gunler = set(), set()
         def _bos_veri():
             return {"Et": 0.0, "Tavuk": 0.0, "Zayi": 0.0,
                     "paket": {"4": 0, "6": 0, "8": 0, "10": 0, "12": 0,
@@ -2060,11 +2062,11 @@ class StokSistemi(QMainWindow):
                     self.paket_genel_veri[_pk]["kullanilan_kg"]   += ilk_kullanim_mik
                     fark_gun = (bugun - t_obj).days
                     if 0 <= fark_gun <= 7:
-                        if kategori == "Et": son_7_et += ilk_kullanim_mik
-                        else: son_7_tavuk += ilk_kullanim_mik
+                        if kategori == "Et": son_7_et += ilk_kullanim_mik; son_7_et_gunler.add(gun_str)
+                        else: son_7_tavuk += ilk_kullanim_mik; son_7_tavuk_gunler.add(gun_str)
                     if 0 <= fark_gun <= 30:
-                        if kategori == "Et": son_30_et += ilk_kullanim_mik
-                        else: son_30_tavuk += ilk_kullanim_mik
+                        if kategori == "Et": son_30_et += ilk_kullanim_mik; son_30_et_gunler.add(gun_str)
+                        else: son_30_tavuk += ilk_kullanim_mik; son_30_tavuk_gunler.add(gun_str)
                 except: pass
             # Küvet tüketimi analizi
             if kuvet_mik > 0 and kuvet_tar != "-":
@@ -2082,11 +2084,11 @@ class StokSistemi(QMainWindow):
                     self.aylik_veri[ay_str][kategori] += kuvet_mik
                     fark_gun = (bugun - t_obj).days
                     if 0 <= fark_gun <= 7:
-                        if kategori == "Et": son_7_et += kuvet_mik
-                        else: son_7_tavuk += kuvet_mik
+                        if kategori == "Et": son_7_et += kuvet_mik; son_7_et_gunler.add(gun_str)
+                        else: son_7_tavuk += kuvet_mik; son_7_tavuk_gunler.add(gun_str)
                     if 0 <= fark_gun <= 30:
-                        if kategori == "Et": son_30_et += kuvet_mik
-                        else: son_30_tavuk += kuvet_mik
+                        if kategori == "Et": son_30_et += kuvet_mik; son_30_et_gunler.add(gun_str)
+                        else: son_30_tavuk += kuvet_mik; son_30_tavuk_gunler.add(gun_str)
                 except: pass
             # Takoz tüketimi analizi
             # Takoz2 varsa: takoz tarihine (takoz_mik - takoz2_mik) ekle (o gün kullanılan kısım)
@@ -2108,11 +2110,11 @@ class StokSistemi(QMainWindow):
                     self.aylik_veri[ay_str][kategori] += takoz_gun_mik
                     fark_gun = (bugun - t_obj).days
                     if 0 <= fark_gun <= 7:
-                        if kategori == "Et": son_7_et += takoz_gun_mik
-                        else: son_7_tavuk += takoz_gun_mik
+                        if kategori == "Et": son_7_et += takoz_gun_mik; son_7_et_gunler.add(gun_str)
+                        else: son_7_tavuk += takoz_gun_mik; son_7_tavuk_gunler.add(gun_str)
                     if 0 <= fark_gun <= 30:
-                        if kategori == "Et": son_30_et += takoz_gun_mik
-                        else: son_30_tavuk += takoz_gun_mik
+                        if kategori == "Et": son_30_et += takoz_gun_mik; son_30_et_gunler.add(gun_str)
+                        else: son_30_tavuk += takoz_gun_mik; son_30_tavuk_gunler.add(gun_str)
                 except: pass
             # Takoz 2. kullanım analizi — takozun kalan kısmı başka bir günde kullanıldı
             if takoz2_mik > 0 and takoz2_tar and takoz2_tar != "-":
@@ -2147,6 +2149,28 @@ class StokSistemi(QMainWindow):
                     self.haftalik_veri[hafta_str]["Zayi"] += zayi_mik
                     self.aylik_veri[ay_str]["Zayi"] += zayi_mik
                 except: pass
+            # Giriş transferleri tüketime dahil et
+            if transfer_mik > 0 and transfer_yon == "Giriş" and transfer_tar != "-":
+                try:
+                    t_obj = None
+                    for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
+                        try: t_obj = datetime.strptime(transfer_tar, fmt); break
+                        except: pass
+                    if t_obj:
+                        gun_str = t_obj.strftime('%d.%m.%Y')
+                        hafta_str = f"{t_obj.strftime('%Y')} - {t_obj.strftime('%W')}. Hafta"
+                        ay_str = f"{t_obj.strftime('%Y')} - {t_obj.strftime('%m')} ({self.aylar.get(t_obj.strftime('%m'), '')})"
+                        self.gunluk_veri[gun_str][kategori] += transfer_mik
+                        self.haftalik_veri[hafta_str][kategori] += transfer_mik
+                        self.aylik_veri[ay_str][kategori] += transfer_mik
+                        fark_gun = (bugun - t_obj).days
+                        if 0 <= fark_gun <= 7:
+                            if kategori == "Et": son_7_et += transfer_mik; son_7_et_gunler.add(gun_str)
+                            else: son_7_tavuk += transfer_mik; son_7_tavuk_gunler.add(gun_str)
+                        if 0 <= fark_gun <= 30:
+                            if kategori == "Et": son_30_et += transfer_mik; son_30_et_gunler.add(gun_str)
+                            else: son_30_tavuk += transfer_mik; son_30_tavuk_gunler.add(gun_str)
+                except: pass
 
             if kategori == "Et":
                 hedef_tablo = self.table_et
@@ -2156,8 +2180,10 @@ class StokSistemi(QMainWindow):
                 tavuk_giren += ilk_mik; tavuk_kalan += kalan_mik
 
             # Transfer olan ürünler normal tabloya eklenmez
-            if transfer_mik > 0 and transfer_yon in ("Çıkış", "Giriş"):
-                continue
+            # Çıkış transferler tabloda görünsün ama tüketim analizine girmesin
+            # Giriş transferler hem tabloda görünsün hem tüketime dahil edilsin
+            if transfer_mik > 0 and transfer_yon == "Çıkış":
+                pass  # Tabloya eklenecek, analiz döngüsü zaten transfer_yon kontrolü yapıyor
 
             row_idx = hedef_tablo.rowCount()
             hedef_tablo.insertRow(row_idx)
@@ -2218,8 +2244,12 @@ class StokSistemi(QMainWindow):
 
         self.lbl_et_toplam.setText(f"🥩 ET STOK DURUMU\n\nGiren: {et_giren:.3f} kg\nKalan: {et_kalan:.3f} kg".replace('.', ','))
         self.lbl_tavuk_toplam.setText(f"🍗 TAVUK STOK DURUMU\n\nGiren: {tavuk_giren:.3f} kg\nKalan: {tavuk_kalan:.3f} kg".replace('.', ','))
-        self.lbl_ort_7.setText(f"⏳ Son 7 Günlük Tüketim Ortalaması\n\nEt: {(son_7_et/7):.3f} kg/gün\nTavuk: {(son_7_tavuk/7):.3f} kg/gün".replace('.', ','))
-        self.lbl_ort_30.setText(f"📅 Son 30 Günlük Tüketim Ortalaması\n\nEt: {(son_30_et/30):.3f} kg/gün\nTavuk: {(son_30_tavuk/30):.3f} kg/gün".replace('.', ','))
+        gun_7_et   = max(len(son_7_et_gunler), 1)
+        gun_7_tv   = max(len(son_7_tavuk_gunler), 1)
+        gun_30_et  = max(len(son_30_et_gunler), 1)
+        gun_30_tv  = max(len(son_30_tavuk_gunler), 1)
+        self.lbl_ort_7.setText(f"⏳ Son 7 Gün Ort. ({gun_7_tv} gün)\n\nEt: {(son_7_et/gun_7_et):.3f} kg/gün\nTavuk: {(son_7_tavuk/gun_7_tv):.3f} kg/gün".replace('.', ','))
+        self.lbl_ort_30.setText(f"📅 Son 30 Gün Ort. ({gun_30_tv} gün)\n\nEt: {(son_30_et/gun_30_et):.3f} kg/gün\nTavuk: {(son_30_tavuk/gun_30_tv):.3f} kg/gün".replace('.', ','))
         self._stok_uyari_guncelle()
         self._dashboard_grafik_guncelle()
 
