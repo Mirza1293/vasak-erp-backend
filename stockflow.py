@@ -82,7 +82,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.1.1"
+UYGULAMA_VERSIYON = "v3.1.2"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -1313,6 +1313,9 @@ class StokSistemi(QMainWindow):
         self.import_btn = QPushButton("Excel'den Al")
         self.import_btn.setObjectName("btn_import")
         self.import_btn.clicked.connect(self.excelden_iceri_aktar)
+        self.yedek_yukle_btn = QPushButton("♻️ Yedekten Yükle")
+        self.yedek_yukle_btn.setObjectName("btn_import")
+        self.yedek_yukle_btn.clicked.connect(self.yedekten_geri_yukle)
         self.excel_btn = QPushButton("Tümünü Excel'e Aktar")
         self.excel_btn.setObjectName("btn_excel")
         self.excel_btn.clicked.connect(self.excel_disa_aktar)
@@ -1334,6 +1337,7 @@ class StokSistemi(QMainWindow):
         top_bar.addWidget(QLabel("🎨"))
         top_bar.addWidget(self.tema_combo)
         top_bar.addWidget(self.import_btn)
+        top_bar.addWidget(self.yedek_yukle_btn)
         top_bar.addWidget(self.excel_btn)
         top_bar.addWidget(self.delete_btn)
         top_bar.addWidget(self.add_btn)
@@ -2061,10 +2065,10 @@ class StokSistemi(QMainWindow):
                     self.paket_genel_veri[_pk]["kullanilan_adet"] += 1
                     self.paket_genel_veri[_pk]["kullanilan_kg"]   += ilk_kullanim_mik
                     fark_gun = (bugun - t_obj).days
-                    if 0 <= fark_gun <= 7:
+                    if 0 <= fark_gun < 7:
                         if kategori == "Et": son_7_et += ilk_kullanim_mik; son_7_et_gunler.add(gun_str)
                         else: son_7_tavuk += ilk_kullanim_mik; son_7_tavuk_gunler.add(gun_str)
-                    if 0 <= fark_gun <= 30:
+                    if 0 <= fark_gun < 30:
                         if kategori == "Et": son_30_et += ilk_kullanim_mik; son_30_et_gunler.add(gun_str)
                         else: son_30_tavuk += ilk_kullanim_mik; son_30_tavuk_gunler.add(gun_str)
                 except: pass
@@ -2083,10 +2087,10 @@ class StokSistemi(QMainWindow):
                     self.haftalik_veri[hafta_str][kategori] += kuvet_mik
                     self.aylik_veri[ay_str][kategori] += kuvet_mik
                     fark_gun = (bugun - t_obj).days
-                    if 0 <= fark_gun <= 7:
+                    if 0 <= fark_gun < 7:
                         if kategori == "Et": son_7_et += kuvet_mik; son_7_et_gunler.add(gun_str)
                         else: son_7_tavuk += kuvet_mik; son_7_tavuk_gunler.add(gun_str)
-                    if 0 <= fark_gun <= 30:
+                    if 0 <= fark_gun < 30:
                         if kategori == "Et": son_30_et += kuvet_mik; son_30_et_gunler.add(gun_str)
                         else: son_30_tavuk += kuvet_mik; son_30_tavuk_gunler.add(gun_str)
                 except: pass
@@ -2109,10 +2113,10 @@ class StokSistemi(QMainWindow):
                     self.haftalik_veri[hafta_str][kategori] += takoz_gun_mik
                     self.aylik_veri[ay_str][kategori] += takoz_gun_mik
                     fark_gun = (bugun - t_obj).days
-                    if 0 <= fark_gun <= 7:
+                    if 0 <= fark_gun < 7:
                         if kategori == "Et": son_7_et += takoz_gun_mik; son_7_et_gunler.add(gun_str)
                         else: son_7_tavuk += takoz_gun_mik; son_7_tavuk_gunler.add(gun_str)
-                    if 0 <= fark_gun <= 30:
+                    if 0 <= fark_gun < 30:
                         if kategori == "Et": son_30_et += takoz_gun_mik; son_30_et_gunler.add(gun_str)
                         else: son_30_tavuk += takoz_gun_mik; son_30_tavuk_gunler.add(gun_str)
                 except: pass
@@ -2131,10 +2135,10 @@ class StokSistemi(QMainWindow):
                     self.haftalik_veri[hafta_str][kategori] += takoz2_mik
                     self.aylik_veri[ay_str][kategori] += takoz2_mik
                     fark_gun = (bugun - t_obj).days
-                    if 0 <= fark_gun <= 7:
+                    if 0 <= fark_gun < 7:
                         if kategori == "Et": son_7_et += takoz2_mik
                         else: son_7_tavuk += takoz2_mik
-                    if 0 <= fark_gun <= 30:
+                    if 0 <= fark_gun < 30:
                         if kategori == "Et": son_30_et += takoz2_mik
                         else: son_30_tavuk += takoz2_mik
                 except: pass
@@ -2164,10 +2168,10 @@ class StokSistemi(QMainWindow):
                         self.haftalik_veri[hafta_str][kategori] += transfer_mik
                         self.aylik_veri[ay_str][kategori] += transfer_mik
                         fark_gun = (bugun - t_obj).days
-                        if 0 <= fark_gun <= 7:
+                        if 0 <= fark_gun < 7:
                             if kategori == "Et": son_7_et += transfer_mik; son_7_et_gunler.add(gun_str)
                             else: son_7_tavuk += transfer_mik; son_7_tavuk_gunler.add(gun_str)
-                        if 0 <= fark_gun <= 30:
+                        if 0 <= fark_gun < 30:
                             if kategori == "Et": son_30_et += transfer_mik; son_30_et_gunler.add(gun_str)
                             else: son_30_tavuk += transfer_mik; son_30_tavuk_gunler.add(gun_str)
                 except: pass
@@ -3322,6 +3326,81 @@ class StokSistemi(QMainWindow):
             wb.save(dosya_yolu)
             QMessageBox.information(self, "Başarılı", "Analiz raporu oluşturuldu!")
         except Exception as e:
+            QMessageBox.critical(self, "Hata", str(e))
+
+    def yedekten_geri_yukle(self):
+        import json
+        dosya_yolu, _ = QFileDialog.getOpenFileName(
+            self, "Yedek Dosyası Seç", self.veri_klasoru,
+            "JSON Yedek (*.json)"
+        )
+        if not dosya_yolu:
+            return
+        try:
+            with open(dosya_yolu, 'r', encoding='utf-8') as f:
+                yedek = json.load(f)
+            veriler = yedek.get("veriler", [])
+            if not veriler:
+                QMessageBox.warning(self, "Hata", "Yedek dosyasında veri bulunamadı!")
+                return
+            tarih = yedek.get("tarih", "?")
+            kayit_sayisi = yedek.get("kayit_sayisi", len(veriler))
+            cevap = QMessageBox.question(
+                self, "Yedekten Geri Yükle",
+                f"Yedek tarihi: {tarih}\nKayıt sayısı: {kayit_sayisi}\n\n"
+                f"⚠️ Mevcut tüm veriler SİLİNECEK ve yedekteki veriler yüklenecek.\n\n"
+                f"Devam etmek istiyor musunuz?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if cevap != QMessageBox.StandardButton.Yes:
+                return
+            # Mevcut tüm kayıtları sil
+            mevcut = self.api.urunleri_getir()
+            silinen = 0
+            for u in mevcut:
+                try:
+                    self.api.urun_sil(u["id"])
+                    silinen += 1
+                except:
+                    pass
+            # Yedekteki kayıtları yükle
+            basarili = hatali = 0
+            for u in veriler:
+                try:
+                    self.api.urun_ekle({
+                        "barkod": u.get("barkod", ""),
+                        "kategori": u.get("kategori", "Et"),
+                        "gelis_tarihi": u.get("gelis_tarihi", "-"),
+                        "ilk_miktar": u.get("ilk_miktar", 0),
+                        "kalan_miktar": u.get("kalan_miktar", 0),
+                    })
+                    urun_id_yeni = self.api.urunleri_getir()[-1]["id"]
+                    # Diğer alanları güncelle
+                    guncelle = {}
+                    for alan in ["kullanim_tarihi", "tekrar_kullanim_tarihi",
+                                 "kuvet_kullanim_tarihi", "kuvet_miktar",
+                                 "takoz_kullanim_tarihi", "takoz_miktar",
+                                 "takoz2_kullanim_tarihi", "takoz2_miktar",
+                                 "zayi_miktar", "zayi_tarihi",
+                                 "transfer_miktar", "transfer_tarihi",
+                                 "transfer_yon", "transfer_isletme"]:
+                        if alan in u and u[alan] not in (None, "", "-", 0):
+                            guncelle[alan] = u[alan]
+                    if guncelle:
+                        self.api.urun_guncelle(urun_id_yeni, guncelle)
+                    basarili += 1
+                except:
+                    hatali += 1
+            self._log_yaz("İşlem", "Yedekten Geri Yüklendi",
+                          f"Dosya: {dosya_yolu.split('/')[-1].split(chr(92))[-1]} | {basarili} kayıt yüklendi")
+            self.verileri_yukle()
+            QMessageBox.information(
+                self, "Tamamlandı",
+                f"✅ {basarili} kayıt başarıyla yüklendi.\n"
+                f"{'❌ ' + str(hatali) + ' kayıt hatalı.' if hatali else ''}"
+            )
+        except Exception as e:
+            self._log_yaz("Hata", "Yedekten Yükleme Hatası", str(e)[:200])
             QMessageBox.critical(self, "Hata", str(e))
 
     def excelden_iceri_aktar(self):
