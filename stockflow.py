@@ -82,7 +82,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.1.2"
+UYGULAMA_VERSIYON = "v3.1.3"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -3348,25 +3348,27 @@ class StokSistemi(QMainWindow):
             cevap = QMessageBox.question(
                 self, "Yedekten Geri Yükle",
                 f"Yedek tarihi: {tarih}\nKayıt sayısı: {kayit_sayisi}\n\n"
-                f"⚠️ Mevcut tüm veriler SİLİNECEK ve yedekteki veriler yüklenecek.\n\n"
                 f"Devam etmek istiyor musunuz?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if cevap != QMessageBox.StandardButton.Yes:
                 return
-            # Mevcut tüm kayıtları sil
-            mevcut = self.api.urunleri_getir()
-            silinen = 0
-            for u in mevcut:
-                try:
-                    self.api.urun_sil(u["id"])
-                    silinen += 1
-                except:
-                    pass
-            # Yedekteki kayıtları yükle
+
             basarili = hatali = 0
+            izinli_alanlar = [
+                "barkod", "kategori", "gelis_tarihi",
+                "kullanim_tarihi", "tekrar_kullanim_tarihi",
+                "kuvet_kullanim_tarihi", "kuvet_miktar",
+                "takoz_kullanim_tarihi", "takoz_miktar",
+                "takoz2_kullanim_tarihi", "takoz2_miktar",
+                "ilk_miktar", "kalan_miktar",
+                "zayi_miktar", "zayi_tarihi",
+                "transfer_miktar", "transfer_tarihi",
+                "transfer_yon", "transfer_isletme"
+            ]
             for u in veriler:
                 try:
+                    # Önce temel kayıt ekle
                     self.api.urun_ekle({
                         "barkod": u.get("barkod", ""),
                         "kategori": u.get("kategori", "Et"),
@@ -3374,25 +3376,26 @@ class StokSistemi(QMainWindow):
                         "ilk_miktar": u.get("ilk_miktar", 0),
                         "kalan_miktar": u.get("kalan_miktar", 0),
                     })
-                    urun_id_yeni = self.api.urunleri_getir()[-1]["id"]
-                    # Diğer alanları güncelle
-                    guncelle = {}
-                    for alan in ["kullanim_tarihi", "tekrar_kullanim_tarihi",
-                                 "kuvet_kullanim_tarihi", "kuvet_miktar",
-                                 "takoz_kullanim_tarihi", "takoz_miktar",
-                                 "takoz2_kullanim_tarihi", "takoz2_miktar",
-                                 "zayi_miktar", "zayi_tarihi",
-                                 "transfer_miktar", "transfer_tarihi",
-                                 "transfer_yon", "transfer_isletme"]:
-                        if alan in u and u[alan] not in (None, "", "-", 0):
-                            guncelle[alan] = u[alan]
-                    if guncelle:
-                        self.api.urun_guncelle(urun_id_yeni, guncelle)
+                    # Yeni eklenen kaydın ID'sini al
+                    tum_kayitlar = self.api.urunleri_getir()
+                    yeni_id = None
+                    for k in reversed(tum_kayitlar):
+                        if k.get("barkod") == u.get("barkod"):
+                            yeni_id = k["id"]
+                            break
+                    if yeni_id and any(u.get(alan) for alan in izinli_alanlar[3:]):
+                        guncelle = {}
+                        for alan in izinli_alanlar[3:]:
+                            val = u.get(alan)
+                            if val is not None and val != "" and val != 0 and val != 0.0:
+                                guncelle[alan] = val
+                        if guncelle:
+                            self.api.urun_guncelle(yeni_id, guncelle)
                     basarili += 1
-                except:
+                except Exception as e:
                     hatali += 1
             self._log_yaz("İşlem", "Yedekten Geri Yüklendi",
-                          f"Dosya: {dosya_yolu.split('/')[-1].split(chr(92))[-1]} | {basarili} kayıt yüklendi")
+                          f"{basarili} kayıt yüklendi")
             self.verileri_yukle()
             QMessageBox.information(
                 self, "Tamamlandı",
