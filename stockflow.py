@@ -82,7 +82,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.1.3"
+UYGULAMA_VERSIYON = "v3.1.4"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -2022,9 +2022,9 @@ class StokSistemi(QMainWindow):
                             self.paket_genel_veri[_gpk].get(f"{kategori}_kalan_adet", 0) + 1
                 except ValueError: pass
 
-            # İlk kullanım tüketimi: ilk - kalan - kuvet - takoz - takoz2 - zayi - transfer
-            # Kalan doğru hesaplandıysa bu sadece "ilk kullanım tarihi"ndeki tüketimi verir
-            ilk_kullanim_mik = max(0.0, ilk_mik - kalan_mik - kuvet_mik - takoz_mik - takoz2_mik - zayi_mik - transfer_mik)
+            # İlk kullanım tüketimi: ilk - kalan - kuvet - takoz - takoz2 - zayi - transfer(sadece çıkış)
+            transfer_cikis_mik = transfer_mik if transfer_yon == "Çıkış" else 0.0
+            ilk_kullanim_mik = max(0.0, ilk_mik - kalan_mik - kuvet_mik - takoz_mik - takoz2_mik - zayi_mik - transfer_cikis_mik)
             if ilk_kullanim_mik > 0 and kullanim != "-":
                 try:
                     t_obj = None
@@ -2191,7 +2191,7 @@ class StokSistemi(QMainWindow):
 
             row_idx = hedef_tablo.rowCount()
             hedef_tablo.insertRow(row_idx)
-            tuketim_yuzdesi = (max(0, ilk_mik - kalan_mik - zayi_mik - transfer_mik) / ilk_mik) * 100 if ilk_mik > 0 else 0
+            tuketim_yuzdesi = (max(0, ilk_mik - kalan_mik - zayi_mik - transfer_cikis_mik) / ilk_mik) * 100 if ilk_mik > 0 else 0
 
             hedef_tablo.setItem(row_idx, 0, SiralanabilirItem(barkod, barkod))
             hedef_tablo.setItem(row_idx, 1, SiralanabilirItem(gelis, self.tarih_gercek_degeri(gelis)))
@@ -2220,7 +2220,8 @@ class StokSistemi(QMainWindow):
             hedef_tablo.setItem(row_idx, 12, id_item)
             # Gizli sütunlar: takoz2 ve transfer (hızlı kalan hesabı için)
             hedef_tablo.setItem(row_idx, 13, QTableWidgetItem(str(takoz2_mik)))
-            hedef_tablo.setItem(row_idx, 14, QTableWidgetItem(str(transfer_mik)))
+            # Gizli sütun 14: Çıkış ise pozitif (kalan azaltır), Giriş ise 0 (kalan etkilemez)
+            hedef_tablo.setItem(row_idx, 14, QTableWidgetItem(str(transfer_cikis_mik)))
 
             for col in range(13):
                 item = hedef_tablo.item(row_idx, col)
