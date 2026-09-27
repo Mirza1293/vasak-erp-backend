@@ -82,7 +82,7 @@ TEMALAR = {
     },
 }
 AKTIF_TEMA = "Maviş"
-UYGULAMA_VERSIYON = "v3.1.4"
+UYGULAMA_VERSIYON = "v3.1.5"
 GITHUB_VERSIYON_URL = "https://raw.githubusercontent.com/Mirza1293/vasak-erp-backend/main/version.txt"
 GITHUB_RELEASE_URL = "https://github.com/Mirza1293/vasak-erp-backend/releases/latest/download/StockFlow_v15.exe"
 
@@ -2184,10 +2184,9 @@ class StokSistemi(QMainWindow):
                 tavuk_giren += ilk_mik; tavuk_kalan += kalan_mik
 
             # Transfer olan ürünler normal tabloya eklenmez
-            # Çıkış transferler tabloda görünsün ama tüketim analizine girmesin
-            # Giriş transferler hem tabloda görünsün hem tüketime dahil edilsin
+            # Çıkış transferler Et/Tavuk tablosunda görünmesin, sadece Transfer sekmesinde
             if transfer_mik > 0 and transfer_yon == "Çıkış":
-                pass  # Tabloya eklenecek, analiz döngüsü zaten transfer_yon kontrolü yapıyor
+                continue
 
             row_idx = hedef_tablo.rowCount()
             hedef_tablo.insertRow(row_idx)
